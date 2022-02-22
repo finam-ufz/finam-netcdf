@@ -5,7 +5,7 @@ import xarray as xr
 from datetime import datetime
 
 from finam.data.grid import Grid
-from finam_netcdf.reader import extract_grid, Layer, NetCdfInitReader
+from finam_netcdf.reader import extract_grid, Layer, NetCdfInitReader, NetCdfTimeReader
 
 
 class TestReader(unittest.TestCase):
@@ -56,4 +56,32 @@ class TestReader(unittest.TestCase):
 
         reader.validate()
         reader.update()
+        reader.finalize()
+
+    def test_time_reader(self):
+        path = "tests/data/lai.nc"
+        reader = NetCdfTimeReader(
+            path, {"LAI": Layer(var="lai", x="lon", y="lat")},
+            time_var="time"
+        )
+
+        reader.initialize()
+        reader.connect()
+
+        res = reader.outputs()["LAI"].get_data(datetime(1901, 1, 1))
+
+        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 1))
+        self.assertTrue(isinstance(res, Grid))
+
+        reader.validate()
+
+        reader.update()
+        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 2))
+        reader.update()
+        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 3))
+        reader.update()
+        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 4))
+        reader.update()
+        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 5))
+
         reader.finalize()

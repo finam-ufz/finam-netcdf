@@ -3,13 +3,13 @@ import numpy as np
 import xarray as xr
 
 from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import AComponent, Output
+from finam.core.sdk import AComponent, Output, ATimeComponent
 
 from finam.data.grid import Grid, GridSpec
 
 
 class Layer:
-    def __init__(self, var, x, y, fixed):
+    def __init__(self, var, x, y, fixed={}):
         self.var = var
         self.x = x
         self.y = y
@@ -42,7 +42,7 @@ class NetCdfInitReader(AComponent):
 
         self.dataset = xr.open_dataset(self.path)
         for name, pars in self.output_vars.items():
-            grid = extract_grid(self.dataset, pars)
+            grid = extract_grid(self.dataset, pars, pars.fixed)
             self._outputs[name].push_data(grid, self._time)
 
         self._status = ComponentStatus.CONNECTED
@@ -60,7 +60,70 @@ class NetCdfInitReader(AComponent):
         self._status = ComponentStatus.FINALIZED
 
 
-def extract_grid(dataset, layer):
+class NetCdfTimeReader(ATimeComponent):
+    def __init__(self, path, outputs, time_var):
+        super(NetCdfTimeReader, self).__init__()
+
+        self.path = path
+        self.output_vars = outputs
+        self.time_var = time_var
+        self.dataset = None
+        self.times = None
+
+        self.time_index = None
+        self._time = None
+
+        self._status = ComponentStatus.CREATED
+
+    def initialize(self):
+        super().initialize()
+
+        self._outputs = {o: Output() for o in self.output_vars.keys()}
+
+        self._status = ComponentStatus.INITIALIZED
+
+    def connect(self):
+        super().connect()
+
+        self.dataset = xr.open_dataset(self.path)
+        times = self.dataset.coords[self.time_var].dt
+
+        self.times = [datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)]
+
+        self.time_index = 0
+        self._time = self.times[self.time_index]
+
+        for name, pars in self.output_vars.items():
+            grid = extract_grid(self.dataset, pars, {self.time_var: self.time_index})
+            self._outputs[name].push_data(grid, self._time)
+
+        self._status = ComponentStatus.CONNECTED
+
+    def validate(self):
+        super().validate()
+        self._status = ComponentStatus.VALIDATED
+
+    def update(self):
+        super().update()
+
+        self.time_index += 1
+        if self.time_index >= len(self.times):
+            self._status = ComponentStatus.FINISHED
+            return
+
+        self._time = self.times[self.time_index]
+        for name, pars in self.output_vars.items():
+            grid = extract_grid(self.dataset, pars, {self.time_var: self.time_index})
+            self._outputs[name].push_data(grid, self._time)
+
+        self._status = ComponentStatus.UPDATED
+
+    def finalize(self):
+        super().finalize()
+        self._status = ComponentStatus.FINALIZED
+
+
+def extract_grid(dataset, layer, fixed=None):
     variable = dataset[layer.var].load()
     x = variable.coords[layer.x]
     y = variable.coords[layer.y]
@@ -78,7 +141,8 @@ def extract_grid(dataset, layer):
             "Only raster data with equal resolution in x and y direction is supported."
         )
 
-    extr = variable.isel(layer.fixed)
+    fx = dict(layer.fixed) if fixed is None else dict(layer.fixed, **fixed)
+    extr = variable.isel(fx)
 
     if len(extr.dims) != 2:
         raise ValueError("NetCDF variable %s has dimensions != 2" % (layer.var,))
