@@ -70,19 +70,36 @@ def extract_grid(dataset, layer):
     if abs(cellsize_x - cellsize_y) > 1e-8:
         raise ValueError("Only raster data with equal resolution in x and y direction is supported.")
 
-    grid: Grid = Grid(GridSpec(
-        ncols=x.shape[0],
-        nrows=y.shape[0],
-        cell_size=cellsize_x, xll=xmin - 0.5 * cellsize_x, yll=ymin - 0.5 * cellsize_x))
-
     extr = variable.isel(layer.fixed)
-    coords = {}
-    for j, yy in enumerate(y.data):
-        for i, xx in enumerate(x.data):
-            ii, jj = grid.to_cell(xx, yy)
-            coords[layer.x] = i
-            coords[layer.y] = j
-            val = extr.isel(coords)
-            grid.set(ii, jj, val.data)
+
+    if len(extr.dims) != 2:
+        raise ValueError("NetCDF variable %s has dimensions != 2" % (layer.var, ))
+
+    transpose = None
+    if extr.dims[0] == layer.x and extr.dims[1] == layer.y:
+        transpose = True
+    elif extr.dims[0] == layer.y and extr.dims[1] == layer.x:
+        transpose = False
+    else:
+        raise ValueError("NetCDF variable %s dimensions do not include x and y (%s, %s)" % (layer.var, layer.x, layer.y))
+
+    x_flip = x.data[0] > x.data[-1]
+    y_flip = y.data[0] > y.data[-1]
+
+    arr = extr.data
+    if transpose:
+        arr = arr.T
+    if y_flip:
+        arr = np.flipud(arr)
+    if x_flip:
+        arr = np.fliplr(arr)
+
+    flat = arr.flatten()
+
+    grid: Grid = Grid(GridSpec(
+            ncols=x.shape[0],
+            nrows=y.shape[0],
+            cell_size=cellsize_x, xll=xmin - 0.5 * cellsize_x, yll=ymin - 0.5 * cellsize_x),
+        data=flat)
 
     return grid
