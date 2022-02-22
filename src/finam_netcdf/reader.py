@@ -3,7 +3,7 @@ import numpy as np
 import xarray as xr
 
 from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import ATimeComponent, Output
+from finam.core.sdk import AComponent, Output
 
 from finam.data.grid import Grid, GridSpec
 
@@ -16,12 +16,19 @@ class Layer:
         self.fixed = fixed
 
 
-class NetCdfReader(ATimeComponent):
-    def __init__(self, path, outputs):
-        super(NetCdfReader, self).__init__()
+class NetCdfInitReader(AComponent):
+    def __init__(self, path, outputs, time=None):
+        super(NetCdfInitReader, self).__init__()
+        if time is not None and not isinstance(time, datetime):
+            raise ValueError("Time must be None or of type datetime")
+
         self.path = path
         self.output_vars = outputs
         self.dataset = None
+
+        self._time = datetime(1900, 1, 1) if time is None else time
+
+        self._status = ComponentStatus.CREATED
 
     def initialize(self):
         super().initialize()
@@ -76,7 +83,6 @@ def extract_grid(dataset, layer):
     if len(extr.dims) != 2:
         raise ValueError("NetCDF variable %s has dimensions != 2" % (layer.var,))
 
-    transpose = None
     if extr.dims[0] == layer.x and extr.dims[1] == layer.y:
         transpose = True
     elif extr.dims[0] == layer.y and extr.dims[1] == layer.x:

@@ -2,7 +2,10 @@ import unittest
 import numpy as np
 import xarray as xr
 
-from finam_netcdf.reader import extract_grid, Layer
+from datetime import datetime
+
+from finam.data.grid import Grid
+from finam_netcdf.reader import extract_grid, Layer, NetCdfInitReader
 
 
 class TestReader(unittest.TestCase):
@@ -37,3 +40,20 @@ class TestReader(unittest.TestCase):
             ).data
             res = grid.get(ci, cj)
             self.assertEqual(orig, res)
+
+    def test_init_reader(self):
+        path = "tests/data/lai.nc"
+        reader = NetCdfInitReader(
+            path, {"LAI": Layer(var="lai", x="lon", y="lat", fixed={"time": 0})}
+        )
+
+        reader.initialize()
+        reader.connect()
+
+        res = reader.outputs()["LAI"].get_data(datetime(1900, 1, 1))
+
+        self.assertTrue(isinstance(res, Grid))
+
+        reader.validate()
+        reader.update()
+        reader.finalize()
