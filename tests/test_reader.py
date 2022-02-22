@@ -61,8 +61,7 @@ class TestReader(unittest.TestCase):
     def test_time_reader(self):
         path = "tests/data/lai.nc"
         reader = NetCdfTimeReader(
-            path, {"LAI": Layer(var="lai", x="lon", y="lat")},
-            time_var="time"
+            path, {"LAI": Layer(var="lai", x="lon", y="lat")}, time_var="time"
         )
 
         reader.initialize()

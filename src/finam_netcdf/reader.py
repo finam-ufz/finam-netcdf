@@ -88,7 +88,9 @@ class NetCdfTimeReader(ATimeComponent):
         self.dataset = xr.open_dataset(self.path)
         times = self.dataset.coords[self.time_var].dt
 
-        self.times = [datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)]
+        self.times = [
+            datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
+        ]
 
         self.time_index = 0
         self._time = self.times[self.time_index]
@@ -141,7 +143,7 @@ def extract_grid(dataset, layer, fixed=None):
             "Only raster data with equal resolution in x and y direction is supported."
         )
 
-    fx = dict(layer.fixed) if fixed is None else dict(layer.fixed, **fixed)
+    fx = layer.fixed if fixed is None else dict(layer.fixed, **fixed)
     extr = variable.isel(fx)
 
     if len(extr.dims) != 2:
