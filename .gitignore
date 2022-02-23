@@ -112,14 +112,14 @@ info/
 *.cpp
 
 # generated version file
-src/finam/_version.py
+src/finam_netcdf/_version.py
 
 # generated docs
 docs/source/examples/
 docs/source/generated/
 
 /docs/build/
-/docs/finam.*
+/docs/finam_netcdf.*
 /docs/modules.rst
 *.csv
 
