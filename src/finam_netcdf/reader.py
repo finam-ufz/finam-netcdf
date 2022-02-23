@@ -97,6 +97,7 @@ class NetCdfTimeReader(ATimeComponent):
     :param path: path to NetCDF file
     :param outputs: dictionary of outputs. Keys are output names, values are Layer object
     :param time_var: time coordinate variable of the dataset
+    :param time_callback: an optional callback for time stepping and indexing: (step, last_time, last_index) -> (time, index)
 
     Usage:
 
@@ -108,17 +109,21 @@ class NetCdfTimeReader(ATimeComponent):
        )
     """
 
-    def __init__(self, path: str, outputs: dict[str, Layer], time_var: str):
+    def __init__(
+        self, path: str, outputs: dict[str, Layer], time_var: str, time_callback=None
+    ):
         super(NetCdfTimeReader, self).__init__()
 
         self.path = path
         self.output_vars = outputs
         self.time_var = time_var
+        self.time_callback = time_callback
         self.dataset = None
         self.times = None
 
         self.time_index = None
         self._time = None
+        self.step = 0
 
         self._status = ComponentStatus.CREATED
 
@@ -133,14 +138,17 @@ class NetCdfTimeReader(ATimeComponent):
         super().connect()
 
         self.dataset = xr.open_dataset(self.path)
-        times = self.dataset.coords[self.time_var].dt
 
-        self.times = [
-            datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
-        ]
+        if self.time_callback is None:
+            times = self.dataset.coords[self.time_var].dt
+            self.times = [
+                datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
+            ]
 
-        self.time_index = 0
-        self._time = self.times[self.time_index]
+            self.time_index = 0
+            self._time = self.times[self.time_index]
+        else:
+            self._time, self.time_index = self.time_callback(self.step, None, None)
 
         for name, pars in self.output_vars.items():
             grid = extract_grid(self.dataset, pars, {self.time_var: self.time_index})
@@ -155,12 +163,19 @@ class NetCdfTimeReader(ATimeComponent):
     def update(self):
         super().update()
 
-        self.time_index += 1
-        if self.time_index >= len(self.times):
-            self._status = ComponentStatus.FINISHED
-            return
+        self.step += 1
 
-        self._time = self.times[self.time_index]
+        if self.time_callback is None:
+            self.time_index += 1
+            if self.time_index >= len(self.times):
+                self._status = ComponentStatus.FINISHED
+                return
+            self._time = self.times[self.time_index]
+        else:
+            self._time, self.time_index = self.time_callback(
+                self.step, self._time, self.time_index
+            )
+
         for name, pars in self.output_vars.items():
             grid = extract_grid(self.dataset, pars, {self.time_var: self.time_index})
             self._outputs[name].push_data(grid, self._time)
