@@ -5,7 +5,8 @@ import xarray as xr
 from datetime import datetime, timedelta
 
 from finam.data.grid import Grid
-from finam_netcdf.reader import extract_grid, Layer, NetCdfInitReader, NetCdfTimeReader
+from finam_netcdf import Layer
+from finam_netcdf.reader import extract_grid, NetCdfInitReader, NetCdfTimeReader
 
 
 class TestReader(unittest.TestCase):
@@ -50,7 +51,7 @@ class TestReader(unittest.TestCase):
         reader.initialize()
         reader.connect()
 
-        res = reader.outputs()["LAI"].get_data(datetime(1900, 1, 1))
+        res = reader.outputs["LAI"].get_data(datetime(1900, 1, 1))
 
         self.assertTrue(isinstance(res, Grid))
 
@@ -67,21 +68,21 @@ class TestReader(unittest.TestCase):
         reader.initialize()
         reader.connect()
 
-        res = reader.outputs()["LAI"].get_data(datetime(1901, 1, 1))
+        res = reader.outputs["LAI"].get_data(datetime(1901, 1, 1))
 
-        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 1))
+        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 1))
         self.assertTrue(isinstance(res, Grid))
 
         reader.validate()
 
         reader.update()
-        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 2))
+        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 2))
         reader.update()
-        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 3))
+        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 3))
         reader.update()
-        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 4))
+        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 4))
         reader.update()
-        self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 5))
+        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 5))
 
         reader.finalize()
 
@@ -100,17 +101,17 @@ class TestReader(unittest.TestCase):
         reader.initialize()
         reader.connect()
 
-        res = reader.outputs()["LAI"].get_data(datetime(2000, 1, 1))
+        res = reader.outputs["LAI"].get_data(datetime(2000, 1, 1))
 
-        self.assertEqual(reader.time(), datetime(2000, 1, 1))
+        self.assertEqual(reader.time, datetime(2000, 1, 1))
         self.assertTrue(isinstance(res, Grid))
 
         reader.validate()
 
         for i in range(15):
             reader.update()
-            self.assertEqual(reader.time(), datetime(2000, 1, i + 2))
-            res = reader.outputs()["LAI"].get_data(datetime(2000, 1, i + 2))
+            self.assertEqual(reader.time, datetime(2000, 1, i + 2))
+            res = reader.outputs["LAI"].get_data(datetime(2000, 1, i + 2))
             self.assertTrue(isinstance(res, Grid))
 
         reader.finalize()

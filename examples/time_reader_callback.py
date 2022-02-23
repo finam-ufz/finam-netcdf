@@ -27,6 +27,6 @@ if __name__ == "__main__":
     composition = Composition([reader, viewer])
     composition.initialize()
 
-    _ = reader.outputs()["LAI"] >> LinearInterpolation() >> viewer.inputs()["Grid"]
+    _ = reader.outputs["LAI"] >> LinearInterpolation() >> viewer.inputs["Grid"]
 
     composition.run(datetime(2005, 1, 1))
