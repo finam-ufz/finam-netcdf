@@ -2,6 +2,8 @@
 NetCDF writer components.
 """
 from datetime import datetime, timedelta
+
+import numpy as np
 import xarray as xr
 
 from finam.core.interfaces import ComponentStatus
@@ -12,7 +14,7 @@ from . import Layer
 
 
 class NetCdfTimedWriter(ATimeComponent):
-    def __init__(self, path: str, inputs: dict[str, Layer], start: datetime, step: timedelta):
+    def __init__(self, path: str, inputs: dict[str, Layer], time_var: str, start: datetime, step: timedelta):
         super(NetCdfTimedWriter, self).__init__()
 
         if start is not None and not isinstance(start, datetime):
@@ -24,6 +26,7 @@ class NetCdfTimedWriter(ATimeComponent):
         self._input_dict = inputs
         self._step = step
         self._time = start
+        self.time_var = time_var
         self.dataset = None
 
         self._inputs = {inp: Input() for inp in self._input_dict.keys()}
@@ -58,6 +61,13 @@ class NetCdfTimedWriter(ATimeComponent):
 
             variables.add(layer.var)
 
+            if layer.x in y_dims:
+                raise ValueError("Y dimension '%s' is already defined."
+                                 "Can't be redefined as X dimension by input '%s'" % (layer.x, name))
+            if layer.y in x_dims:
+                raise ValueError("X dimension '%s' is already defined."
+                                 "Can't be redefined as Y dimension by input '%s'" % (layer.y, name))
+
             if layer.x in x_dims:
                 spec = x_dims[layer.x]
                 if spec.xll != data.spec.xll \
@@ -78,7 +88,15 @@ class NetCdfTimedWriter(ATimeComponent):
             else:
                 y_dims[layer.y] = data.spec
 
-        self.dataset = xr.Dataset()
+        x_dims = {name: np.arange(spec.ncols) * spec.cell_size + (spec.xll + 0.5 * spec.cell_size)
+                  for name, spec in x_dims.items()}
+        y_dims = {name: np.flip(np.arange(spec.nrows) * spec.cell_size + (spec.yll + 0.5 * spec.cell_size))
+                  for name, spec in y_dims.items()}
+
+        coords = dict(x_dims, **y_dims)
+        coords[self.time_var] = np.ndarray(0, dtype='datetime64[ns]')
+
+        self.dataset = xr.Dataset(coords=coords)
 
         self._status = ComponentStatus.VALIDATED
 

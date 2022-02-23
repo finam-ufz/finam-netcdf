@@ -13,7 +13,7 @@ from finam_netcdf.writer import NetCdfTimedWriter
 
 
 def generate_grid():
-    return Grid(GridSpec(5, 5), np.random.random(25))
+    return Grid(GridSpec(10, 5), np.random.random(25))
 
 
 class TestWriter(unittest.TestCase):
@@ -29,6 +29,7 @@ class TestWriter(unittest.TestCase):
         reader = NetCdfTimedWriter(
             path,
             {"LAI": Layer(var="lai", x="lon", y="lat")},
+            time_var="time",
             start=datetime(2000, 1, 1), step=timedelta(days=1),
         )
 
