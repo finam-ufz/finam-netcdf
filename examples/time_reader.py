@@ -1,10 +1,8 @@
 from datetime import timedelta, datetime
-import time
 
 from finam.adapters.time import LinearInterpolation
 from finam.core.schedule import Composition
 from finam.modules.visual import grid
-from finam.modules import generators
 from finam_netcdf.reader import Layer, NetCdfTimeReader
 
 if __name__ == "__main__":
