@@ -1,3 +1,7 @@
+"""
+NetCDF reader components.
+"""
+
 from datetime import datetime
 import numpy as np
 import xarray as xr
@@ -9,7 +13,16 @@ from finam.data.grid import Grid, GridSpec
 
 
 class Layer:
-    def __init__(self, var, x, y, fixed={}):
+    """
+    Defines a NetCDF layer (2D data array).
+
+    :param var: layer variable
+    :param x: x coordinate variable
+    :param y: y coordinate variable
+    :param fixed: dictionary for further, fixed index coordinate variables (e.g. 'time')
+    """
+
+    def __init__(self, var: str, x: str, y: str, fixed: dict = {}):
         self.var = var
         self.x = x
         self.y = y
@@ -17,7 +30,24 @@ class Layer:
 
 
 class NetCdfInitReader(AComponent):
-    def __init__(self, path, outputs, time=None):
+    """
+    NetCDF reader component that reads a single 2D data array at startup.
+
+    :param path: path to NetCDF file
+    :param outputs: dictionary of outputs. Keys are output names, values are Layer object
+    :param time: starting time stamp. Optional. Default '1900-01-01'.
+
+    Usage:
+
+    .. code-block:: python
+
+       path = "tests/data/lai.nc"
+       reader = NetCdfInitReader(
+           path, {"LAI": Layer(var="lai", x="lon", y="lat", fixed={"time": 0})}
+       )
+    """
+
+    def __init__(self, path: str, outputs: dict[str, Layer], time: datetime = None):
         super(NetCdfInitReader, self).__init__()
         if time is not None and not isinstance(time, datetime):
             raise ValueError("Time must be None or of type datetime")
@@ -61,7 +91,24 @@ class NetCdfInitReader(AComponent):
 
 
 class NetCdfTimeReader(ATimeComponent):
-    def __init__(self, path, outputs, time_var):
+    """
+    NetCDF reader component that steps along a date/time coordinate dimension of a dataset.
+
+    :param path: path to NetCDF file
+    :param outputs: dictionary of outputs. Keys are output names, values are Layer object
+    :param time_var: time coordinate variable of the dataset
+
+    Usage:
+
+    .. code-block:: python
+
+       path = "tests/data/lai.nc"
+       reader = NetCdfTimeReader(
+           path, {"LAI": Layer(var="lai", x="lon", y="lat")}, time_var="time"
+       )
+    """
+
+    def __init__(self, path: str, outputs: dict[str, Layer], time_var: str):
         super(NetCdfTimeReader, self).__init__()
 
         self.path = path
@@ -126,6 +173,7 @@ class NetCdfTimeReader(ATimeComponent):
 
 
 def extract_grid(dataset, layer, fixed=None):
+    """Extracts a 2D data array from a dataset"""
     variable = dataset[layer.var].load()
     x = variable.coords[layer.x]
     y = variable.coords[layer.y]
