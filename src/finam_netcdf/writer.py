@@ -9,6 +9,7 @@ import xarray as xr
 from finam.core.interfaces import ComponentStatus
 from finam.core.sdk import Input, ATimeComponent
 from finam.data.grid import Grid
+from numpy import datetime64
 
 from . import Layer
 
@@ -34,7 +35,7 @@ class NetCdfTimedWriter(ATimeComponent):
         self._step = step
         self._time = start
         self.time_var = time_var
-        self.dataset = None
+        self.data_arrays = {}
 
         self._inputs = {inp: Input() for inp in self._input_dict.keys()}
 
@@ -128,23 +129,43 @@ class NetCdfTimedWriter(ATimeComponent):
         coords = dict(
             {self.time_var: np.ndarray(0, dtype="datetime64[ns]")}, **x_dims, **y_dims
         )
-        data = {
-            name: xr.DataArray(
-                None,
+        self.data_arrays = {
+            layer.var: xr.DataArray(
+                np.ndarray((0, data.spec.nrows, data.spec.ncols), dtype=dtype),
                 coords=[coords[self.time_var], coords[layer.y], coords[layer.x]],
                 dims=[self.time_var, layer.y, layer.x],
             )
             for name, (layer, dtype) in variables.items()
         }
 
-        self.dataset = xr.Dataset(data_vars=data, coords=coords)
-
         self._status = ComponentStatus.VALIDATED
 
     def update(self):
         super().update()
 
-        values = [self._inputs[inp].pull_data(self.time) for inp in self.inputs.keys()]
+        for (name, inp), (_n, layer) in zip(
+            self.inputs.items(), self._input_dict.items()
+        ):
+            data = inp.pull_data(self.time)
+
+            if not isinstance(data, Grid):
+                raise ValueError(
+                    "Only data of type `Grid` can be added to NetCDF files."
+                )
+
+            var = self.data_arrays[layer.var]
+
+            new_var = xr.DataArray(
+                np.expand_dims(data.reshape(data.spec.nrows, data.spec.ncols), axis=0),
+                coords=[
+                    [datetime64(self.time, "ns")],
+                    var.coords[layer.y],
+                    var.coords[layer.x],
+                ],
+                dims=[self.time_var, layer.y, layer.x],
+            )
+
+            self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
 
         self._time += self._step
         self._status = ComponentStatus.UPDATED
@@ -152,6 +173,8 @@ class NetCdfTimedWriter(ATimeComponent):
     def finalize(self):
         super().finalize()
 
-        # TODO: save dataset
+        dataset = xr.Dataset(data_vars=self.data_arrays)
+        dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
+        dataset.close()
 
         self._status = ComponentStatus.FINALIZED

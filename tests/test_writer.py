@@ -1,6 +1,8 @@
 import unittest
 import numpy as np
 import xarray as xr
+from os import path
+from tempfile import TemporaryDirectory
 
 from datetime import datetime, timedelta
 
@@ -13,38 +15,54 @@ from finam_netcdf.writer import NetCdfTimedWriter
 
 
 def generate_grid():
-    return Grid(GridSpec(10, 5), np.random.random(25))
+    return Grid(GridSpec(10, 5), data=np.random.random(50))
 
 
 class TestWriter(unittest.TestCase):
     def test_time_writer(self):
-        path = "tests/out/test.nc"
 
-        source1 = CallbackGenerator(
-            callbacks={"Grid": lambda t: generate_grid()},
-            start=datetime(2000, 1, 1),
-            step=timedelta(days=1),
-        )
-        source2 = CallbackGenerator(
-            callbacks={"Grid": lambda t: generate_grid()},
-            start=datetime(2000, 1, 1),
-            step=timedelta(days=1),
-        )
-        reader = NetCdfTimedWriter(
-            path,
-            {
-                "LAI": Layer(var="lai", x="lon", y="lat"),
-                "LAI2": Layer(var="lai2", x="lon", y="lat"),
-            },
-            time_var="time",
-            start=datetime(2000, 1, 1),
-            step=timedelta(days=1),
-        )
+        with TemporaryDirectory() as tmp:
+            file = path.join(tmp, "test.nc")
 
-        composition = Composition([source1, source2, reader])
-        composition.initialize()
+            source1 = CallbackGenerator(
+                callbacks={"Grid": lambda t: generate_grid()},
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
+            source2 = CallbackGenerator(
+                callbacks={"Grid": lambda t: generate_grid()},
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
+            writer = NetCdfTimedWriter(
+                path=file,
+                inputs={
+                    "LAI": Layer(var="lai", x="lon", y="lat"),
+                    "LAI2": Layer(var="lai2", x="lon", y="lat"),
+                },
+                time_var="time",
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
 
-        _ = source1.outputs["Grid"] >> reader.inputs["LAI"]
-        _ = source2.outputs["Grid"] >> reader.inputs["LAI2"]
+            composition = Composition([source1, source2, writer])
+            composition.initialize()
 
-        composition.run(datetime(2000, 1, 31))
+            _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
+            _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
+
+            composition.run(datetime(2000, 1, 31))
+
+            dataset = xr.open_dataset(file)
+            lai = dataset["lai"]
+
+            self.assertEqual(lai.dims, ("time", "lat", "lon"))
+            self.assertEqual(lai.coords["time"].shape, (30,))
+            self.assertEqual(lai.coords["lat"].shape, (5,))
+            self.assertEqual(lai.coords["lon"].shape, (10,))
+
+            times = lai.coords["time"].data
+            self.assertEqual(times[0], np.datetime64(datetime(2000, 1, 1)))
+            self.assertEqual(times[-1], np.datetime64(datetime(2000, 1, 30)))
+
+            dataset.close()
