@@ -22,6 +22,8 @@ Both components can read multiple variables from a single dataset.
 All coordinate dimensions except `x` and `y` must be fixed at a certain index.
 
 ```python
+from finam_netcdf.reader import Layer, NetCdfInitReader
+
 path = "tests/data/lai.nc"
 reader = NetCdfInitReader(
     path=path,
@@ -35,6 +37,8 @@ reader = NetCdfInitReader(
 All coordinate dimensions except `x`, `y` and `time` must be fixed at a certain index.
 
 ```python
+from finam_netcdf.reader import Layer, NetCdfTimeReader
+
 path = "tests/data/lai.nc"
 reader = NetCdfTimeReader(
     path=path, 

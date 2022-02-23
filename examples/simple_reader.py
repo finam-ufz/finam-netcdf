@@ -10,6 +10,7 @@ if __name__ == "__main__":
     reader = NetCdfInitReader(
         path, {"LAI": Layer(var="lai", x="lon", y="lat", fixed={"time": 0})}
     )
+
     viewer = grid.TimedGridView(start=datetime(2000, 1, 1), step=timedelta(days=1))
 
     composition = Composition([reader, viewer])

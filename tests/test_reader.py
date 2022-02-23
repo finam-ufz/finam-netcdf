@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import xarray as xr
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from finam.data.grid import Grid
 from finam_netcdf.reader import extract_grid, Layer, NetCdfInitReader, NetCdfTimeReader
@@ -82,5 +82,35 @@ class TestReader(unittest.TestCase):
         self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 4))
         reader.update()
         self.assertEqual(reader.time(), datetime(1901, 1, 1, 0, 5))
+
+        reader.finalize()
+
+    def test_time_reader_callback(self):
+        start = datetime(2000, 1, 1)
+        step = timedelta(days=1)
+
+        path = "tests/data/lai.nc"
+        reader = NetCdfTimeReader(
+            path,
+            {"LAI": Layer(var="lai", x="lon", y="lat")},
+            time_var="time",
+            time_callback=lambda s, _t, _i: (start + s * step, s % 12),
+        )
+
+        reader.initialize()
+        reader.connect()
+
+        res = reader.outputs()["LAI"].get_data(datetime(2000, 1, 1))
+
+        self.assertEqual(reader.time(), datetime(2000, 1, 1))
+        self.assertTrue(isinstance(res, Grid))
+
+        reader.validate()
+
+        for i in range(15):
+            reader.update()
+            self.assertEqual(reader.time(), datetime(2000, 1, i + 2))
+            res = reader.outputs()["LAI"].get_data(datetime(2000, 1, i + 2))
+            self.assertTrue(isinstance(res, Grid))
 
         reader.finalize()
