@@ -17,25 +17,34 @@ def generate_grid():
 
 
 class TestWriter(unittest.TestCase):
-
     def test_time_writer(self):
         path = "tests/out/test.nc"
 
-        source = CallbackGenerator(
+        source1 = CallbackGenerator(
+            callbacks={"Grid": lambda t: generate_grid()},
+            start=datetime(2000, 1, 1),
+            step=timedelta(days=1),
+        )
+        source2 = CallbackGenerator(
             callbacks={"Grid": lambda t: generate_grid()},
             start=datetime(2000, 1, 1),
             step=timedelta(days=1),
         )
         reader = NetCdfTimedWriter(
             path,
-            {"LAI": Layer(var="lai", x="lon", y="lat")},
+            {
+                "LAI": Layer(var="lai", x="lon", y="lat"),
+                "LAI2": Layer(var="lai2", x="lon", y="lat"),
+            },
             time_var="time",
-            start=datetime(2000, 1, 1), step=timedelta(days=1),
+            start=datetime(2000, 1, 1),
+            step=timedelta(days=1),
         )
 
-        composition = Composition([source, reader])
+        composition = Composition([source1, source2, reader])
         composition.initialize()
 
-        _ = source.outputs["Grid"] >> reader.inputs["LAI"]
+        _ = source1.outputs["Grid"] >> reader.inputs["LAI"]
+        _ = source2.outputs["Grid"] >> reader.inputs["LAI2"]
 
         composition.run(datetime(2000, 1, 31))

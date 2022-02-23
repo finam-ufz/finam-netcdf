@@ -14,7 +14,14 @@ from . import Layer
 
 
 class NetCdfTimedWriter(ATimeComponent):
-    def __init__(self, path: str, inputs: dict[str, Layer], time_var: str, start: datetime, step: timedelta):
+    def __init__(
+        self,
+        path: str,
+        inputs: dict[str, Layer],
+        time_var: str,
+        start: datetime,
+        step: timedelta,
+    ):
         super(NetCdfTimedWriter, self).__init__()
 
         if start is not None and not isinstance(start, datetime):
@@ -46,57 +53,91 @@ class NetCdfTimedWriter(ATimeComponent):
     def validate(self):
         super().validate()
 
-        variables = set()
+        variables = {}
         x_dims = {}
         y_dims = {}
 
-        for (name, inp), (_n, layer) in zip(self.inputs.items(), self._input_dict.items()):
+        for (name, inp), (_n, layer) in zip(
+            self.inputs.items(), self._input_dict.items()
+        ):
             data = inp.pull_data(self.time)
 
             if not isinstance(data, Grid):
-                raise ValueError("Only data of type `Grid` can be added to NetCDF files.")
+                raise ValueError(
+                    "Only data of type `Grid` can be added to NetCDF files."
+                )
 
             if layer.var in variables:
                 raise ValueError("Duplicate variable %s." % (layer.var,))
 
-            variables.add(layer.var)
+            variables[layer.var] = layer, data.dtype
 
             if layer.x in y_dims:
-                raise ValueError("Y dimension '%s' is already defined."
-                                 "Can't be redefined as X dimension by input '%s'" % (layer.x, name))
+                raise ValueError(
+                    "Y dimension '%s' is already defined."
+                    "Can't be redefined as X dimension by input '%s'" % (layer.x, name)
+                )
             if layer.y in x_dims:
-                raise ValueError("X dimension '%s' is already defined."
-                                 "Can't be redefined as Y dimension by input '%s'" % (layer.y, name))
+                raise ValueError(
+                    "X dimension '%s' is already defined."
+                    "Can't be redefined as Y dimension by input '%s'" % (layer.y, name)
+                )
 
             if layer.x in x_dims:
                 spec = x_dims[layer.x]
-                if spec.xll != data.spec.xll \
-                        or spec.cell_size != data.spec.cell_size \
-                        or spec.ncols != data.spec.ncols:
-                    raise ValueError("X dimension '%s' is already defined."
-                                     "Definition differs from data provided by input '%s'" % (layer.x, name))
+                if (
+                    spec.xll != data.spec.xll
+                    or spec.cell_size != data.spec.cell_size
+                    or spec.ncols != data.spec.ncols
+                ):
+                    raise ValueError(
+                        "X dimension '%s' is already defined."
+                        "Definition differs from data provided by input '%s'"
+                        % (layer.x, name)
+                    )
             else:
                 x_dims[layer.x] = data.spec
 
             if layer.y in y_dims:
                 spec = y_dims[layer.y]
-                if spec.yll != data.spec.yll \
-                        or spec.cell_size != data.spec.cell_size \
-                        or spec.nrows != data.spec.nrows:
-                    raise ValueError("Y dimension '%s' is already defined."
-                                     "Definition differs from data provided by input '%s'" % (layer.y, name))
+                if (
+                    spec.yll != data.spec.yll
+                    or spec.cell_size != data.spec.cell_size
+                    or spec.nrows != data.spec.nrows
+                ):
+                    raise ValueError(
+                        "Y dimension '%s' is already defined."
+                        "Definition differs from data provided by input '%s'"
+                        % (layer.y, name)
+                    )
             else:
                 y_dims[layer.y] = data.spec
 
-        x_dims = {name: np.arange(spec.ncols) * spec.cell_size + (spec.xll + 0.5 * spec.cell_size)
-                  for name, spec in x_dims.items()}
-        y_dims = {name: np.flip(np.arange(spec.nrows) * spec.cell_size + (spec.yll + 0.5 * spec.cell_size))
-                  for name, spec in y_dims.items()}
+        x_dims = {
+            name: np.arange(spec.ncols) * spec.cell_size
+            + (spec.xll + 0.5 * spec.cell_size)
+            for name, spec in x_dims.items()
+        }
+        y_dims = {
+            name: np.flip(
+                np.arange(spec.nrows) * spec.cell_size
+                + (spec.yll + 0.5 * spec.cell_size)
+            )
+            for name, spec in y_dims.items()
+        }
+        coords = dict(
+            {self.time_var: np.ndarray(0, dtype="datetime64[ns]")}, **x_dims, **y_dims
+        )
+        data = {
+            name: xr.DataArray(
+                None,
+                coords=[coords[self.time_var], coords[layer.y], coords[layer.x]],
+                dims=[self.time_var, layer.y, layer.x],
+            )
+            for name, (layer, dtype) in variables.items()
+        }
 
-        coords = dict(x_dims, **y_dims)
-        coords[self.time_var] = np.ndarray(0, dtype='datetime64[ns]')
-
-        self.dataset = xr.Dataset(coords=coords)
+        self.dataset = xr.Dataset(data_vars=data, coords=coords)
 
         self._status = ComponentStatus.VALIDATED
 
