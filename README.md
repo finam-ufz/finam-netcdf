@@ -90,7 +90,7 @@ reader = NetCdfTimeReader(
 Component outputs can be accessed by the keys used for `outputs`, e.g. for linking:
 
 ```python
-reader.outputs()["LAI"] >> viewer.inputs()["Grid"]
+reader.outputs["LAI"] >> viewer.inputs["Grid"]
 ```
 
 ### Writers
