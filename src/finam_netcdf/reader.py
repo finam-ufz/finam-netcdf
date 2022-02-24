@@ -70,6 +70,9 @@ class NetCdfInitReader(AComponent):
 
     def finalize(self):
         super().finalize()
+
+        self.dataset.close()
+
         self._status = ComponentStatus.FINALIZED
 
 
