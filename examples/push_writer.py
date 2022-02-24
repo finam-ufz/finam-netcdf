@@ -17,7 +17,7 @@ if __name__ == "__main__":
     directory = "examples/output"
     if not os.path.exists(directory):
         os.mkdir(directory)
-    
+
     file = os.path.join(directory, "test.nc")
 
     lai_gen = CallbackGenerator(
@@ -36,7 +36,7 @@ if __name__ == "__main__":
             "LAI": Layer(var="lai", x="lon", y="lat"),
             "SM": Layer(var="soil_moisture", x="lon", y="lat"),
         },
-        time_var="time"
+        time_var="time",
     )
 
     composition = Composition([lai_gen, sm_gen, writer])
