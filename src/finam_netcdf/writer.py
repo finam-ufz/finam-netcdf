@@ -3,11 +3,12 @@ NetCDF writer components.
 """
 from datetime import datetime, timedelta
 
+from functools import partial
 import numpy as np
 import xarray as xr
 
 from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import Input, ATimeComponent
+from finam.core.sdk import Input, ATimeComponent, AComponent, CallbackInput
 from finam.data.grid import Grid
 from numpy import datetime64
 
@@ -108,6 +109,136 @@ class NetCdfTimedWriter(ATimeComponent):
         dataset.close()
 
         self._status = ComponentStatus.FINALIZED
+
+
+class NetCdfPushWriter(AComponent):
+    def __init__(
+        self,
+        path: str,
+        inputs: dict[str, Layer],
+        time_var: str,
+    ):
+        super(NetCdfPushWriter, self).__init__()
+
+        self._path = path
+        self._input_dict = inputs
+        self.time_var = time_var
+        self.data_arrays = {}
+
+        self._inputs = {
+            inp: CallbackInput(partial(self.data_changed, inp))
+            for inp in self._input_dict.keys()
+        }
+
+        self.last_update = None
+
+        self._status = ComponentStatus.CREATED
+
+    def initialize(self):
+        super().initialize()
+
+        self._status = ComponentStatus.INITIALIZED
+
+    def connect(self):
+        super().connect()
+
+        self._status = ComponentStatus.CONNECTED
+
+    def validate(self):
+        super().validate()
+
+        variables, coords = extract_vars_dims(
+            self.inputs, self._input_dict, self.last_update
+        )
+
+        coords = dict({self.time_var: np.ndarray(0, dtype="datetime64[ns]")}, **coords)
+
+        self.data_arrays = {
+            layer.var: xr.DataArray(
+                np.ndarray(
+                    (0, coords[layer.y].shape[0], coords[layer.x].shape[0]), dtype=dtype
+                ),
+                coords=[coords[self.time_var], coords[layer.y], coords[layer.x]],
+                dims=[self.time_var, layer.y, layer.x],
+            )
+            for name, (layer, dtype) in variables.items()
+        }
+
+        for name, inp in self.inputs.items():
+            layer = self._input_dict[name]
+            data = inp.pull_data(self.last_update)
+
+            if not isinstance(data, Grid):
+                raise ValueError(
+                    "Only data of type `Grid` can be added to NetCDF files."
+                )
+
+            var = self.data_arrays[layer.var]
+
+            new_var = xr.DataArray(
+                np.expand_dims(data.reshape(data.spec.nrows, data.spec.ncols), axis=0),
+                coords=[
+                    [datetime64(self.last_update, "ns")],
+                    var.coords[layer.y],
+                    var.coords[layer.x],
+                ],
+                dims=[self.time_var, layer.y, layer.x],
+            )
+
+            self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
+
+        self._status = ComponentStatus.VALIDATED
+
+    def update(self):
+        super().update()
+        self._status = ComponentStatus.UPDATED
+
+    def finalize(self):
+        super().finalize()
+
+        dataset = xr.Dataset(data_vars=self.data_arrays)
+        dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
+        dataset.close()
+        dataset.close()
+
+        self._status = ComponentStatus.FINALIZED
+
+    def data_changed(self, name, caller, time):
+        if not isinstance(time, datetime):
+            raise ValueError("Time must be of type datetime")
+
+        if self.status == ComponentStatus.INITIALIZED:
+            self.last_update = time
+            return
+
+        if time != self.last_update:
+            lengths = [a.shape[0] for a in self.data_arrays.values()]
+            if lengths.count(lengths[0]) != len(lengths):
+                raise ValueError("Incomplete dataset for time %s" % (self.last_update,))
+
+        self.last_update = time
+
+        layer = self._input_dict[name]
+        data = caller.pull_data(self.last_update)
+
+        if not isinstance(data, Grid):
+            raise ValueError("Only data of type `Grid` can be added to NetCDF files.")
+
+        var = self.data_arrays[layer.var]
+
+        new_var = xr.DataArray(
+            np.expand_dims(data.reshape(data.spec.nrows, data.spec.ncols), axis=0),
+            coords=[
+                [datetime64(self.last_update, "ns")],
+                var.coords[layer.y],
+                var.coords[layer.x],
+            ],
+            dims=[self.time_var, layer.y, layer.x],
+        )
+
+        self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
+
+        self.update()
 
 
 def extract_vars_dims(inputs, layers, t0):
