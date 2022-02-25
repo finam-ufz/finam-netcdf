@@ -94,7 +94,12 @@ class NetCdfTimeReader(ATimeComponent):
     """
 
     def __init__(
-        self, path: str, outputs: dict[str, Layer], time_var: str, time_callback=None
+        self,
+        path: str,
+        outputs: dict[str, Layer],
+        time_var: str,
+        time_limits=None,
+        time_callback=None,
     ):
         """
         Constructs a NetCDF reader for reading time series of data grid.
@@ -102,6 +107,7 @@ class NetCdfTimeReader(ATimeComponent):
         :param path: path to NetCDF file
         :param outputs: dictionary of outputs. Keys are output names, values are Layer object
         :param time_var: time coordinate variable of the dataset
+        :param time_limits: tuple of start and end datetime (both inclusive)
         :param time_callback: an optional callback for time stepping and indexing:
                               (step, last_time, last_index) -> (time, index)
         """
@@ -111,10 +117,12 @@ class NetCdfTimeReader(ATimeComponent):
         self.output_vars = outputs
         self.time_var = time_var
         self.time_callback = time_callback
+        self.time_limits = time_limits
         self.dataset = None
         self.times = None
 
         self.time_index = None
+        self.time_indices = None
         self._time = None
         self.step = 0
 
@@ -132,19 +140,33 @@ class NetCdfTimeReader(ATimeComponent):
 
         self.dataset = xr.open_dataset(self.path)
 
+        times = self.dataset.coords[self.time_var].dt
+
+        if self.time_limits is None:
+            self.time_indices = list(range(times.date.data.shape[0]))
+        else:
+            self.time_indices = []
+            mn = self.time_limits[0]
+            mx = self.time_limits[1]
+            for i, (d, t) in enumerate(zip(times.date.data, times.time.data)):
+                tt = datetime.combine(d, t)
+                if (mn is None or tt >= mn) and (mx is None or tt <= mx):
+                    self.time_indices.append(i)
+
         if self.time_callback is None:
-            times = self.dataset.coords[self.time_var].dt
             self.times = [
                 datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
             ]
 
             self.time_index = 0
-            self._time = self.times[self.time_index]
+            self._time = self.times[self.time_indices[self.time_index]]
         else:
             self._time, self.time_index = self.time_callback(self.step, None, None)
 
         for name, pars in self.output_vars.items():
-            grid = extract_grid(self.dataset, pars, {self.time_var: self.time_index})
+            grid = extract_grid(
+                self.dataset, pars, {self.time_var: self.time_indices[self.time_index]}
+            )
             self._outputs[name].push_data(grid, self._time)
 
         self._status = ComponentStatus.CONNECTED
@@ -155,15 +177,14 @@ class NetCdfTimeReader(ATimeComponent):
 
     def update(self):
         super().update()
-
         self.step += 1
 
         if self.time_callback is None:
             self.time_index += 1
-            if self.time_index >= len(self.times):
+            if self.time_index >= len(self.time_indices):
                 self._status = ComponentStatus.FINISHED
                 return
-            self._time = self.times[self.time_index]
+            self._time = self.times[self.time_indices[self.time_index]]
         else:
             self._time, self.time_index = self.time_callback(
                 self.step, self._time, self.time_index
