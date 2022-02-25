@@ -30,7 +30,8 @@ Reads once during initialization of the coupling setup.
 All coordinate dimensions except `x` and `y` must be fixed at a certain index.
 
 ```python
-from finam_netcdf.reader import Layer, NetCdfInitReader
+from finam_netcdf import Layer
+from finam_netcdf.reader import NetCdfInitReader
 
 path = "tests/data/lai.nc"
 reader = NetCdfInitReader(
@@ -47,7 +48,8 @@ Reads once on each time step, where time steps are defined by the time dimension
 All coordinate dimensions except `x`, `y` and `time` must be fixed at a certain index.
 
 ```python
-from finam_netcdf.reader import Layer, NetCdfTimeReader
+from finam_netcdf import Layer
+from finam_netcdf.reader import NetCdfTimeReader
 
 path = "tests/data/lai.nc"
 reader = NetCdfTimeReader(
@@ -67,7 +69,8 @@ This example cycles through the 12 rasters every year:
 
 ```python
 from datetime import datetime
-from finam_netcdf.reader import Layer, NetCdfTimeReader
+from finam_netcdf import Layer
+from finam_netcdf.reader import NetCdfTimeReader
 
 start = datetime(2000, 1, 1)
 
@@ -95,4 +98,45 @@ reader.outputs["LAI"] >> viewer.inputs["Grid"]
 
 ### Writers
 
-TODO
+The package provides two types of NetCDF writer components:
+
+* `NetCdfTimedWriter` for writing in predefined, fixed time intervals
+* `NetCdfPushWriter` for writing whenever new data becomes available
+
+Both components can write multiple variables to a single dataset.
+
+#### `NetCdfTimedWriter`
+
+Writes time slices regularly, irrespective of input time steps.
+
+```python
+from datetime import datetime, timedelta
+from finam_netcdf import Layer
+from finam_netcdf.writer import NetCdfTimedWriter
+
+path = "tests/data/out.nc"
+reader = NetCdfTimedWriter(
+    path=path,
+    inputs={"LAI": Layer(var="lai", x="lon", y="lat")},
+    time_var="time",
+    start=datetime(2000, 1, 1),
+    step=timedelta(days=1),
+)
+```
+
+#### `NetCdfPushWriter`
+
+Writes time slices as soon as new data becomes available to the inputs.
+Note that all input data sources must have the same time step!
+
+```python
+from finam_netcdf import Layer
+from finam_netcdf.writer import NetCdfPushWriter
+
+path = "tests/data/out.nc"
+reader = NetCdfPushWriter(
+    path=path,
+    inputs={"LAI": Layer(var="lai", x="lon", y="lat")},
+    time_var="time"
+)
+```

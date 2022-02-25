@@ -16,10 +16,6 @@ class NetCdfInitReader(AComponent):
     """
     NetCDF reader component that reads a single 2D data array at startup.
 
-    :param path: path to NetCDF file
-    :param outputs: dictionary of outputs. Keys are output names, values are Layer object
-    :param time: starting time stamp. Optional. Default '1900-01-01'.
-
     Usage:
 
     .. code-block:: python
@@ -31,6 +27,13 @@ class NetCdfInitReader(AComponent):
     """
 
     def __init__(self, path: str, outputs: dict[str, Layer], time: datetime = None):
+        """
+        Constructs a NetCDF reader for reading a single data grid.
+
+        :param path: path to NetCDF file
+        :param outputs: dictionary of outputs. Keys are output names, values are Layer object
+        :param time: starting time stamp. Optional. Default '1900-01-01'.
+        """
         super(NetCdfInitReader, self).__init__()
         if time is not None and not isinstance(time, datetime):
             raise ValueError("Time must be None or of type datetime")
@@ -80,11 +83,6 @@ class NetCdfTimeReader(ATimeComponent):
     """
     NetCDF reader component that steps along a date/time coordinate dimension of a dataset.
 
-    :param path: path to NetCDF file
-    :param outputs: dictionary of outputs. Keys are output names, values are Layer object
-    :param time_var: time coordinate variable of the dataset
-    :param time_callback: an optional callback for time stepping and indexing: (step, last_time, last_index) -> (time, index)
-
     Usage:
 
     .. code-block:: python
@@ -98,6 +96,15 @@ class NetCdfTimeReader(ATimeComponent):
     def __init__(
         self, path: str, outputs: dict[str, Layer], time_var: str, time_callback=None
     ):
+        """
+        Constructs a NetCDF reader for reading time series of data grid.
+
+        :param path: path to NetCDF file
+        :param outputs: dictionary of outputs. Keys are output names, values are Layer object
+        :param time_var: time coordinate variable of the dataset
+        :param time_callback: an optional callback for time stepping and indexing:
+                              (step, last_time, last_index) -> (time, index)
+        """
         super(NetCdfTimeReader, self).__init__()
 
         self.path = path
