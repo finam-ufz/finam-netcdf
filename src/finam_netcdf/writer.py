@@ -2,13 +2,12 @@
 NetCDF writer components.
 """
 from datetime import datetime, timedelta
-
 from functools import partial
+
 import numpy as np
 import xarray as xr
-
 from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import Input, ATimeComponent, AComponent, CallbackInput
+from finam.core.sdk import AComponent, ATimeComponent, CallbackInput, Input
 from finam.data.grid import Grid
 from numpy import datetime64
 
@@ -53,7 +52,7 @@ class NetCdfTimedWriter(ATimeComponent):
         :param start: starting time (of type datetime)
         :param step: time step (of type timedelta)
         """
-        super(NetCdfTimedWriter, self).__init__()
+        super().__init__()
 
         if start is not None and not isinstance(start, datetime):
             raise ValueError("Start must be None or of type datetime")
@@ -174,7 +173,7 @@ class NetCdfPushWriter(AComponent):
         :param inputs: dictionary of inputs. Keys are input names, values are Layer object
         :param time_var: name of the time coordinate/variable in the output dataset
         """
-        super(NetCdfPushWriter, self).__init__()
+        super().__init__()
 
         self._path = path
         self._input_dict = inputs

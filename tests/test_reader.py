@@ -1,13 +1,13 @@
 import unittest
-import numpy as np
-import xarray as xr
-
 from datetime import datetime, timedelta
 
+import numpy as np
+import xarray as xr
 from finam.core.sdk import FinamStatusError
 from finam.data.grid import Grid
+
 from finam_netcdf import Layer
-from finam_netcdf.reader import extract_grid, NetCdfInitReader, NetCdfTimeReader
+from finam_netcdf.reader import NetCdfInitReader, NetCdfTimeReader, extract_grid
 
 
 class TestReader(unittest.TestCase):

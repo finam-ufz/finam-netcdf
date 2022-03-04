@@ -3,13 +3,12 @@ NetCDF reader components.
 """
 
 from datetime import datetime
-import numpy as np
-import xarray as xr
 
+import xarray as xr
 from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import AComponent, Output, ATimeComponent
-from finam.data.grid import Grid, GridSpec
-from . import Layer
+from finam.core.sdk import AComponent, ATimeComponent, Output
+
+from . import Layer, extract_grid
 
 
 class NetCdfInitReader(AComponent):
@@ -34,7 +33,7 @@ class NetCdfInitReader(AComponent):
         :param outputs: dictionary of outputs. Keys are output names, values are Layer object
         :param time: starting time stamp. Optional. Default '1900-01-01'.
         """
-        super(NetCdfInitReader, self).__init__()
+        super().__init__()
         if time is not None and not isinstance(time, datetime):
             raise ValueError("Time must be None or of type datetime")
 
@@ -111,7 +110,7 @@ class NetCdfTimeReader(ATimeComponent):
         :param time_callback: an optional callback for time stepping and indexing:
                               (step, last_time, last_index) -> (time, index)
         """
-        super(NetCdfTimeReader, self).__init__()
+        super().__init__()
 
         self.path = path
         self.output_vars = outputs
@@ -199,65 +198,3 @@ class NetCdfTimeReader(ATimeComponent):
     def finalize(self):
         super().finalize()
         self._status = ComponentStatus.FINALIZED
-
-
-def extract_grid(dataset, layer, fixed=None):
-    """Extracts a 2D data array from a dataset"""
-    variable = dataset[layer.var].load()
-    x = variable.coords[layer.x]
-    y = variable.coords[layer.y]
-
-    xmin = x.data.min()
-    xmax = x.data.max()
-    ymin = y.data.min()
-    ymax = y.data.max()
-
-    cellsize_x = (xmax - xmin) / (x.shape[0] - 1)
-    cellsize_y = (ymax - ymin) / (y.shape[0] - 1)
-
-    if abs(cellsize_x - cellsize_y) > 1e-8:
-        raise ValueError(
-            "Only raster data with equal resolution in x and y direction is supported."
-        )
-
-    fx = layer.fixed if fixed is None else dict(layer.fixed, **fixed)
-    extr = variable.isel(fx)
-
-    if len(extr.dims) != 2:
-        raise ValueError("NetCDF variable %s has dimensions != 2" % (layer.var,))
-
-    if extr.dims[0] == layer.x and extr.dims[1] == layer.y:
-        transpose = True
-    elif extr.dims[0] == layer.y and extr.dims[1] == layer.x:
-        transpose = False
-    else:
-        raise ValueError(
-            "NetCDF variable %s dimensions do not include x and y (%s, %s)"
-            % (layer.var, layer.x, layer.y)
-        )
-
-    x_flip = x.data[0] > x.data[-1]
-    y_flip = y.data[0] < y.data[-1]
-
-    arr = extr.data
-    if transpose:
-        arr = arr.T
-    if y_flip:
-        arr = np.flipud(arr)
-    if x_flip:
-        arr = np.fliplr(arr)
-
-    flat = arr.flatten()
-
-    grid: Grid = Grid(
-        GridSpec(
-            ncols=x.shape[0],
-            nrows=y.shape[0],
-            cell_size=cellsize_x,
-            xll=xmin - 0.5 * cellsize_x,
-            yll=ymin - 0.5 * cellsize_x,
-        ),
-        data=flat,
-    )
-
-    return grid

@@ -1,17 +1,16 @@
 import unittest
-import numpy as np
-import xarray as xr
+from datetime import datetime, timedelta
 from os import path
 from tempfile import TemporaryDirectory
 
-from datetime import datetime, timedelta
-
+import numpy as np
+import xarray as xr
 from finam.core.schedule import Composition
 from finam.data.grid import Grid, GridSpec
 from finam.modules.generators import CallbackGenerator
 
 from finam_netcdf import Layer
-from finam_netcdf.writer import NetCdfTimedWriter, NetCdfPushWriter
+from finam_netcdf.writer import NetCdfPushWriter, NetCdfTimedWriter
 
 
 def generate_grid():
