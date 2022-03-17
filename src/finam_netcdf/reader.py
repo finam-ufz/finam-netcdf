@@ -152,11 +152,16 @@ class NetCdfTimeReader(ATimeComponent):
                 if (mn is None or tt >= mn) and (mx is None or tt <= mx):
                     self.time_indices.append(i)
 
-        if self.time_callback is None:
-            self.times = [
-                datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
-            ]
+        self.times = [
+            datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
+        ]
+        for i in range(len(self.times) - 1):
+            if self.times[i] >= self.times[i + 1]:
+                raise ValueError(
+                    f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
+                )
 
+        if self.time_callback is None:
             self.time_index = 0
             self._time = self.times[self.time_indices[self.time_index]]
         else:
