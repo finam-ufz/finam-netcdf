@@ -4,7 +4,7 @@ NetCDF reader components.
 from datetime import datetime
 
 import xarray as xr
-from finam import ComponentStatus, AComponent, ATimeComponent, Output
+from finam import AComponent, ATimeComponent, ComponentStatus, Output
 
 from . import Layer, extract_grid
 
@@ -54,13 +54,12 @@ class NetCdfInitReader(AComponent):
             for name, pars in self.output_vars.items():
                 info, grid = extract_grid(self.dataset, pars, pars.fixed)
                 grid.name = name
-                print(grid)
                 self.data[name] = (info, grid)
 
         self.try_connect(
             time=self._time,
             push_infos={name: value[0] for name, value in self.data.items()},
-            push_data={name: value[1] for name, value in self.data.items()}
+            push_data={name: value[1] for name, value in self.data.items()},
         )
 
         if self.status == ComponentStatus.CONNECTED:

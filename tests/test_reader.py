@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import xarray as xr
-from finam import FinamStatusError, UniformGrid, Composition, Info, UNITS
+from finam import UNITS, Composition, FinamStatusError, Info, UniformGrid
 from finam.modules.debug import DebugConsumer
 
 from finam_netcdf import Layer
@@ -23,23 +23,22 @@ class TestReader(unittest.TestCase):
     def test_init_reader(self):
         path = "tests/data/lai.nc"
         reader = NetCdfInitReader(
-            path, {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
-            time=datetime(1901, 1, 1, 0, 1, 0)
+            path,
+            {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
+            time=datetime(1901, 1, 1, 0, 1, 0),
         )
         consumer = DebugConsumer(
             {"Input": Info(grid=None, units=None)},
-            start=datetime(1900, 1, 1),
+            start=datetime(1901, 1, 1),
             step=timedelta(days=1),
         )
 
-        comp = Composition([reader, consumer])
+        comp = Composition([reader, consumer], log_level="DEBUG")
         comp.initialize()
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
 
-        comp.run(datetime(1900, 1, 2))
-
-
+        comp.run(datetime(1901, 1, 2))
 
     def test_time_reader(self):
         path = "tests/data/lai.nc"

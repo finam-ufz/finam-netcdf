@@ -1,10 +1,14 @@
 """NetCDF file I/O components for FINAM"""
+import copy
+
 import numpy as np
-import pandas as pd
-import xarray as xr
-from datetime import datetime
-from finam import Location, RectilinearGrid, UniformGrid, Info
-from finam.data import check_axes_monotonicity, check_axes_uniformity, quantify, has_time
+from finam import Info, Location, RectilinearGrid, UniformGrid
+from finam.data import (
+    check_axes_monotonicity,
+    check_axes_uniformity,
+    has_time,
+    quantify,
+)
 
 
 class Layer:
@@ -72,7 +76,12 @@ def extract_grid(dataset, layer, fixed=None):
             axes, axes_names=layer.xyz, data_location=Location.POINTS
         )
 
-    meta = {}
-    info = Info(grid=grid, meta=meta)
     xdata = quantify(xdata)
+
+    if has_time(xdata):
+        xdata = xdata.expand_dims(dim="time", axis=0)
+
+    meta = copy.copy(xdata.attrs)
+    info = Info(grid=grid, meta=meta)
+
     return info, xdata
