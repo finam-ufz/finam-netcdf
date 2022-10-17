@@ -51,17 +51,24 @@ def extract_grid(dataset, layer, fixed=None):
     axes = [ax.data for ax in xyz]
     axes_increase = check_axes_monotonicity(axes)
 
+    # re-order axes to xyz
     xdata = extr.transpose(*layer.xyz)
 
+    # flip to make all axes increasing
     for i, is_increase in enumerate(axes_increase):
         if not is_increase:
             ax_name = layer.xyz[i]
-            xdata.reindex(**{ax_name: xdata[ax_name][::-1]})
+            xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
 
+    # calculate properties of uniform grids
     spacing = check_axes_uniformity(axes)
     origin = [ax[0] for ax in axes]
     is_uniform = not any(np.isnan(spacing))
 
+    # note: we use point-associated data here.
+    # Not sure if this is intended.
+    # Could also calculate points for cell data.
+    # Not sure if this is unambiguous for edges for rectilinear grids.
     if is_uniform:
         dims = [len(ax) for ax in axes]
         grid = UniformGrid(
@@ -78,6 +85,7 @@ def extract_grid(dataset, layer, fixed=None):
 
     xdata = quantify(xdata)
 
+    # re-insert the time dimension
     if has_time(xdata):
         xdata = xdata.expand_dims(dim="time", axis=0)
 
