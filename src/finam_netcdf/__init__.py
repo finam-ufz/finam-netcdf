@@ -1,7 +1,10 @@
 """NetCDF file I/O components for FINAM"""
-
 import numpy as np
-from finam.data.grid import Grid, GridSpec
+import pandas as pd
+import xarray as xr
+from datetime import datetime
+from finam import Location, RectilinearGrid, UniformGrid, Info
+from finam.data import check_axes_monotonicity, check_axes_uniformity, quantify, has_time
 
 
 class Layer:
@@ -14,69 +17,62 @@ class Layer:
     :param fixed: dictionary for further, fixed index coordinate variables (e.g. 'time')
     """
 
-    def __init__(self, var: str, x: str, y: str, fixed=None):
+    def __init__(self, var: str, xyz=("x", "y"), fixed=None):
         self.var = var
-        self.x = x
-        self.y = y
+        self.xyz = xyz
         self.fixed = fixed or {}
 
 
 def extract_grid(dataset, layer, fixed=None):
     """Extracts a 2D data array from a dataset"""
     variable = dataset[layer.var].load()
-    x = variable.coords[layer.x]
-    y = variable.coords[layer.y]
-
-    xmin = x.data.min()
-    xmax = x.data.max()
-    ymin = y.data.min()
-    ymax = y.data.max()
-
-    cellsize_x = (xmax - xmin) / (x.shape[0] - 1)
-    cellsize_y = (ymax - ymin) / (y.shape[0] - 1)
-
-    if abs(cellsize_x - cellsize_y) > 1e-8:
-        raise ValueError(
-            "Only raster data with equal resolution in x and y direction is supported."
-        )
+    xyz = [variable.coords[ax] for ax in layer.xyz]
 
     fx = layer.fixed if fixed is None else dict(layer.fixed, **fixed)
     extr = variable.isel(fx)
 
-    if len(extr.dims) != 2:
-        raise ValueError(f"NetCDF variable {layer.var} has dimensions != 2")
-
-    if extr.dims[0] == layer.x and extr.dims[1] == layer.y:
-        transpose = True
-    elif extr.dims[0] == layer.y and extr.dims[1] == layer.x:
-        transpose = False
-    else:
+    if len(extr.dims) > 3:
+        raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
+    if len(extr.dims) != len(layer.xyz):
         raise ValueError(
-            f"NetCDF variable {layer.var} dimensions do not include x and y ({layer.x}, {layer.y})"
+            f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
         )
 
-    x_flip = x.data[0] > x.data[-1]
-    y_flip = y.data[0] < y.data[-1]
+    for ax in layer.xyz:
+        if ax not in extr.dims:
+            raise ValueError(
+                f"Dimension {ax} not available for NetCDF variable {layer.var}"
+            )
 
-    arr = extr.data
-    if transpose:
-        arr = arr.T
-    if y_flip:
-        arr = np.flipud(arr)
-    if x_flip:
-        arr = np.fliplr(arr)
+    axes = [ax.data for ax in xyz]
+    axes_increase = check_axes_monotonicity(axes)
 
-    flat = arr.flatten()
+    xdata = extr.transpose(*layer.xyz)
 
-    grid: Grid = Grid(
-        GridSpec(
-            ncols=x.shape[0],
-            nrows=y.shape[0],
-            cell_size=cellsize_x,
-            xll=xmin - 0.5 * cellsize_x,
-            yll=ymin - 0.5 * cellsize_x,
-        ),
-        data=flat,
-    )
+    for i, is_increase in enumerate(axes_increase):
+        if not is_increase:
+            ax_name = layer.xyz[i]
+            xdata.reindex(**{ax_name: xdata[ax_name][::-1]})
 
-    return grid
+    spacing = check_axes_uniformity(axes)
+    origin = [ax[0] for ax in axes]
+    is_uniform = not any(np.isnan(spacing))
+
+    if is_uniform:
+        dims = [len(ax) for ax in axes]
+        grid = UniformGrid(
+            dims,
+            axes_names=layer.xyz,
+            spacing=tuple(spacing),
+            origin=tuple(origin),
+            data_location=Location.POINTS,
+        )
+    else:
+        grid = RectilinearGrid(
+            axes, axes_names=layer.xyz, data_location=Location.POINTS
+        )
+
+    meta = {}
+    info = Info(grid=grid, meta=meta)
+    xdata = quantify(xdata)
+    return info, xdata

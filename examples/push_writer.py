@@ -1,10 +1,11 @@
 import os
-import numpy as np
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
+import numpy as np
 from finam.core.schedule import Composition
 from finam.data.grid import Grid, GridSpec
 from finam.modules.generators import CallbackGenerator
+
 from finam_netcdf import Layer
 from finam_netcdf.writer import NetCdfPushWriter
 
