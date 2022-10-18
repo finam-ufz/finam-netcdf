@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from finam import Composition
+import finam as fm
 from finam.adapters.time import LinearInterpolation
 from finam_plot import ContourPlot
 
@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     viewer = ContourPlot()
 
-    composition = Composition([reader, viewer])
+    composition = fm.Composition([reader, viewer])
     composition.initialize()
 
     _ = reader.outputs["LAI"] >> LinearInterpolation() >> viewer.inputs["Grid"]

@@ -1,8 +1,8 @@
 import os
 from datetime import datetime, timedelta
 
+import finam as fm
 import numpy as np
-from finam import Composition, Info, UniformGrid
 from finam.modules.generators import CallbackGenerator
 
 from finam_netcdf import Layer
@@ -16,7 +16,7 @@ def random_grid(grid):
 
 
 if __name__ == "__main__":
-    grid = UniformGrid((10, 5), data_location="POINTS")
+    grid = fm.UniformGrid((10, 5), data_location="POINTS")
     directory = "examples/output"
     if not os.path.exists(directory):
         os.mkdir(directory)
@@ -24,12 +24,12 @@ if __name__ == "__main__":
     file = os.path.join(directory, "test.nc")
 
     lai_gen = CallbackGenerator(
-        callbacks={"LAI": (lambda t: random_grid(grid), Info(grid))},
+        callbacks={"LAI": (lambda t: random_grid(grid), fm.Info(grid))},
         start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )
     sm_gen = CallbackGenerator(
-        callbacks={"SM": (lambda t: random_grid(grid), Info(grid))},
+        callbacks={"SM": (lambda t: random_grid(grid), fm.Info(grid))},
         start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         step=timedelta(days=1),
     )
 
-    composition = Composition([lai_gen, sm_gen, writer])
+    composition = fm.Composition([lai_gen, sm_gen, writer])
     composition.initialize()
 
     _ = lai_gen.outputs["LAI"] >> writer.inputs["LAI"]
