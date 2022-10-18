@@ -8,7 +8,7 @@ import numpy as np
 import xarray as xr
 from finam import AComponent, ATimeComponent, CallbackInput, ComponentStatus
 
-from . import Layer
+from .tools import Layer
 
 
 class NetCdfTimedWriter(ATimeComponent):

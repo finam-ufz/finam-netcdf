@@ -1,5 +1,4 @@
 import os.path
-import time
 import unittest
 from datetime import datetime, timedelta
 from os import path
@@ -10,8 +9,8 @@ import xarray as xr
 from finam import Composition, Info, UniformGrid
 from finam.modules.generators import CallbackGenerator
 
-from finam_netcdf import Layer
-from finam_netcdf.writer import NetCdfPushWriter, NetCdfTimedWriter
+from finam_netcdf import NetCdfPushWriter, NetCdfTimedWriter
+from finam_netcdf.tools import Layer
 
 
 def generate_grid(grid):

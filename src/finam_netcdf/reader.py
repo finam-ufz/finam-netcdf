@@ -7,7 +7,7 @@ import xarray as xr
 from finam import AComponent, ATimeComponent, ComponentStatus
 from finam.data import get_data
 
-from . import Layer, extract_grid
+from .tools import Layer, extract_grid
 
 
 class NetCdfInitReader(AComponent):

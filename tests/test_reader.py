@@ -2,11 +2,11 @@ import unittest
 from datetime import datetime, timedelta
 
 import xarray as xr
-from finam import UNITS, Composition, FinamStatusError, Info, UniformGrid
+from finam import Composition, Info, UniformGrid
 from finam.modules.debug import DebugConsumer
 
-from finam_netcdf import Layer
-from finam_netcdf.reader import NetCdfInitReader, NetCdfTimeReader, extract_grid
+from finam_netcdf import NetCdfInitReader, NetCdfTimeReader
+from finam_netcdf.tools import Layer, extract_grid
 
 
 class TestReader(unittest.TestCase):
