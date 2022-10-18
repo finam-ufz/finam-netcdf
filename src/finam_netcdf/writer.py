@@ -5,10 +5,9 @@ from datetime import datetime, timedelta
 from functools import partial
 
 import numpy as np
+import pandas as pd
 import xarray as xr
-from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import AComponent, ATimeComponent, CallbackInput, Input
-from finam.data.grid import Grid
+from finam import AComponent, ATimeComponent, CallbackInput, ComponentStatus, Input
 from numpy import datetime64
 
 from . import Layer
@@ -26,8 +25,8 @@ class NetCdfTimedWriter(ATimeComponent):
        writer = NetCdfTimedWriter(
             path=file,
             inputs={
-                "LAI": Layer(var="lai", x="lon", y="lat"),
-                "SM": Layer(var="soil_moisture", x="lon", y="lat"),
+                "LAI": Layer(var="lai", xyz=("lon", "lat")),
+                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
             },
             time_var="time",
             start=datetime(2000, 1, 1),
@@ -66,77 +65,46 @@ class NetCdfTimedWriter(ATimeComponent):
         self.time_var = time_var
         self.data_arrays = {}
 
-        self._inputs = {inp: Input() for inp in self._input_dict.keys()}
+        self.status = ComponentStatus.CREATED
 
-        self._status = ComponentStatus.CREATED
+    def _initialize(self):
+        for inp in self._input_dict.keys():
+            self.inputs.add(name=inp, grid=None)
 
-    def initialize(self):
-        super().initialize()
+        self.create_connector(required_in_data=list(self._input_dict.keys()))
 
-        self._status = ComponentStatus.INITIALIZED
+    def _connect(self):
+        self.try_connect(time=self._time)
 
-    def connect(self):
-        super().connect()
+        if self.status != ComponentStatus.CONNECTED:
+            return
 
-        self._status = ComponentStatus.CONNECTED
-
-    def validate(self):
-        super().validate()
-
-        variables, coords = extract_vars_dims(self.inputs, self._input_dict, self.time)
-
-        coords = dict({self.time_var: np.ndarray(0, dtype="datetime64[ns]")}, **coords)
+        variables, coords = extract_vars_dims(
+            self.connector.in_infos, self.connector.in_data, self._input_dict, self.time
+        )
 
         self.data_arrays = {
-            layer.var: xr.DataArray(
-                np.ndarray(
-                    (0, coords[layer.y].shape[0], coords[layer.x].shape[0]), dtype=dtype
-                ),
-                coords=[coords[self.time_var], coords[layer.y], coords[layer.x]],
-                dims=[self.time_var, layer.y, layer.x],
-            )
-            for name, (layer, dtype) in variables.items()
+            layer.var: self.connector.in_data[name].assign_coords(coords)
+            for name, layer in self._input_dict.items()
         }
 
-        self._status = ComponentStatus.VALIDATED
+    def _validate(self):
+        pass
 
-    def update(self):
-        super().update()
-
+    def _update(self):
         for name, inp in self.inputs.items():
             layer = self._input_dict[name]
-            data = inp.pull_data(self.time)
-
-            if not isinstance(data, Grid):
-                raise ValueError(
-                    "Only data of type `Grid` can be added to NetCDF files."
-                )
+            new_var = inp.pull_data(self.time)
 
             var = self.data_arrays[layer.var]
-
-            new_var = xr.DataArray(
-                np.expand_dims(data.reshape(data.spec.nrows, data.spec.ncols), axis=0),
-                coords=[
-                    [datetime64(self.time, "ns")],
-                    var.coords[layer.y],
-                    var.coords[layer.x],
-                ],
-                dims=[self.time_var, layer.y, layer.x],
-            )
 
             self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
 
         self._time += self._step
-        self._status = ComponentStatus.UPDATED
 
-    def finalize(self):
-        super().finalize()
-
+    def _finalize(self):
         dataset = xr.Dataset(data_vars=self.data_arrays)
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
-        dataset.close()
-
-        self._status = ComponentStatus.FINALIZED
 
 
 class NetCdfPushWriter(AComponent):
@@ -296,74 +264,44 @@ class NetCdfPushWriter(AComponent):
         self.update()
 
 
-def extract_vars_dims(inputs, layers, t0):
+def extract_vars_dims(in_infos, in_data, layers, t0):
     variables = {}
-    x_dims = {}
-    y_dims = {}
+    max_dims = 3
+    dims = [{}, {}, {}]
 
-    for name, inp in inputs.items():
+    for name, data in in_data.items():
         layer = layers[name]
-        data = inp.pull_data(t0)
-
-        if not isinstance(data, Grid):
-            raise ValueError("Only data of type `Grid` can be added to NetCDF files.")
 
         if layer.var in variables:
             raise ValueError("Duplicate variable %s." % (layer.var,))
 
+        grid_info = in_infos[name].grid
         variables[layer.var] = layer, data.dtype
 
-        if layer.x in y_dims:
-            raise ValueError(
-                "Y dimension '%s' is already defined."
-                "Can't be redefined as X dimension by input '%s'" % (layer.x, name)
-            )
-        if layer.y in x_dims:
-            raise ValueError(
-                "X dimension '%s' is already defined."
-                "Can't be redefined as Y dimension by input '%s'" % (layer.y, name)
-            )
-
-        if layer.x in x_dims:
-            spec = x_dims[layer.x]
-            if (
-                spec.xll != data.spec.xll
-                or spec.cell_size != data.spec.cell_size
-                or spec.ncols != data.spec.ncols
-            ):
+        for i, ax in enumerate(layer.xyz):
+            if ax not in grid_info.axes_names:
                 raise ValueError(
-                    "X dimension '%s' is already defined."
-                    "Definition differs from data provided by input '%s'"
-                    % (layer.x, name)
+                    "Dimension %d '%s' is not in the data for input %s. "
+                    "Available axes are %s" % (i, ax, name, grid_info.axes_names)
                 )
-        else:
-            x_dims[layer.x] = data.spec
+            for j in range(max_dims):
+                if i != j and ax in dims[j]:
+                    raise ValueError(
+                        "Dimension %d '%s' is already defined. "
+                        "Definition differs from data provided by input '%s'"
+                        % (i, ax, name)
+                    )
+            curr_dim = dims[i]
+            axis_values = in_infos[name].grid.data_axes[i]
+            if ax in curr_dim:
+                axis = curr_dim[ax]
+                if not np.allclose(axis_values, axis):
+                    raise ValueError(
+                        "Dimension %d '%s' is already defined. "
+                        "Definition differs from data provided by input '%s'"
+                        % (i, ax, name)
+                    )
+            else:
+                curr_dim[ax] = axis_values
 
-        if layer.y in y_dims:
-            spec = y_dims[layer.y]
-            if (
-                spec.yll != data.spec.yll
-                or spec.cell_size != data.spec.cell_size
-                or spec.nrows != data.spec.nrows
-            ):
-                raise ValueError(
-                    "Y dimension '%s' is already defined."
-                    "Definition differs from data provided by input '%s'"
-                    % (layer.y, name)
-                )
-        else:
-            y_dims[layer.y] = data.spec
-
-    x_dims = {
-        name: np.arange(spec.ncols) * spec.cell_size + (spec.xll + 0.5 * spec.cell_size)
-        for name, spec in x_dims.items()
-    }
-    y_dims = {
-        name: np.flip(
-            np.arange(spec.nrows) * spec.cell_size + (spec.yll + 0.5 * spec.cell_size)
-        )
-        for name, spec in y_dims.items()
-    }
-    coords = dict(x_dims, **y_dims)
-
-    return variables, coords
+    return variables, dict(dict(**dims[0], **dims[1], **dims[2]))

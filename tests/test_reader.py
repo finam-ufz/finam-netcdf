@@ -1,7 +1,6 @@
 import unittest
 from datetime import datetime, timedelta
 
-import numpy as np
 import xarray as xr
 from finam import UNITS, Composition, FinamStatusError, Info, UniformGrid
 from finam.modules.debug import DebugConsumer
@@ -43,63 +42,43 @@ class TestReader(unittest.TestCase):
     def test_time_reader(self):
         path = "tests/data/lai.nc"
         reader = NetCdfTimeReader(
-            path, {"LAI": Layer(var="lai", x="lon", y="lat")}, time_var="time"
+            path, {"LAI": Layer(var="lai", xyz=("lon", "lat"))}, time_var="time"
         )
 
-        reader.initialize()
-        reader.connect()
+        consumer = DebugConsumer(
+            {"Input": Info(grid=None, units=None)},
+            start=datetime(1901, 1, 1, 0, 1),
+            step=timedelta(hours=1),
+        )
 
-        _res = reader.outputs["LAI"].get_data(datetime(1901, 1, 1))
+        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp.initialize()
 
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 1))
-        # self.assertTrue(isinstance(res, Grid))
+        reader.outputs["LAI"] >> consumer.inputs["Input"]
 
-        reader.validate()
-
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 2))
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 3))
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 4))
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 5))
-
-        reader.finalize()
+        comp.run(datetime(1901, 1, 1, 0, 12))
 
     def test_time_reader_limits(self):
         path = "tests/data/lai.nc"
         reader = NetCdfTimeReader(
             path,
-            {"LAI": Layer(var="lai", x="lon", y="lat")},
+            {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
             time_var="time",
             time_limits=(datetime(1901, 1, 1, 0, 8), None),
         )
 
-        reader.initialize()
-        reader.connect()
+        consumer = DebugConsumer(
+            {"Input": Info(grid=None, units=None)},
+            start=datetime(1901, 1, 1, 0, 1),
+            step=timedelta(hours=1),
+        )
 
-        _res = reader.outputs["LAI"].get_data(datetime(1901, 1, 1))
+        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp.initialize()
 
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 8))
-        # self.assertTrue(isinstance(res, Grid))
+        reader.outputs["LAI"] >> consumer.inputs["Input"]
 
-        reader.validate()
-
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 9))
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 10))
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 11))
-        reader.update()
-        self.assertEqual(reader.time, datetime(1901, 1, 1, 0, 12))
-        reader.update()
-
-        with self.assertRaises(FinamStatusError):
-            reader.update()
-
-        reader.finalize()
+        comp.run(datetime(1901, 1, 1, 0, 12))
 
     def test_time_reader_callback(self):
         start = datetime(2000, 1, 1)
@@ -108,25 +87,20 @@ class TestReader(unittest.TestCase):
         path = "tests/data/lai.nc"
         reader = NetCdfTimeReader(
             path,
-            {"LAI": Layer(var="lai", x="lon", y="lat")},
+            {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
             time_var="time",
             time_callback=lambda s, _t, _i: (start + s * step, s % 12),
         )
 
-        reader.initialize()
-        reader.connect()
+        consumer = DebugConsumer(
+            {"Input": Info(grid=None, units=None)},
+            start=datetime(2000, 1, 1),
+            step=timedelta(days=1),
+        )
 
-        _res = reader.outputs["LAI"].get_data(datetime(2000, 1, 1))
+        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp.initialize()
 
-        self.assertEqual(reader.time, datetime(2000, 1, 1))
-        # self.assertTrue(isinstance(res, Grid))
+        reader.outputs["LAI"] >> consumer.inputs["Input"]
 
-        reader.validate()
-
-        for i in range(15):
-            reader.update()
-            self.assertEqual(reader.time, datetime(2000, 1, i + 2))
-            _res = reader.outputs["LAI"].get_data(datetime(2000, 1, i + 2))
-            # self.assertTrue(isinstance(res, Grid))
-
-        reader.finalize()
+        comp.run(datetime(2000, 12, 31))
