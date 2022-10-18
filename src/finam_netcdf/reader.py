@@ -1,14 +1,13 @@
 """
 NetCDF reader components.
 """
-
 from datetime import datetime
 
 import xarray as xr
-from finam.core.interfaces import ComponentStatus
-from finam.core.sdk import AComponent, ATimeComponent, Output
+from finam import AComponent, ATimeComponent, ComponentStatus
+from finam.data import get_data
 
-from . import Layer, extract_grid
+from .tools import Layer, extract_grid
 
 
 class NetCdfInitReader(AComponent):
@@ -21,7 +20,7 @@ class NetCdfInitReader(AComponent):
 
        path = "tests/data/lai.nc"
        reader = NetCdfInitReader(
-           path, {"LAI": Layer(var="lai", x="lon", y="lat", fixed={"time": 0})}
+           path, {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})}
        )
     """
 
@@ -40,42 +39,43 @@ class NetCdfInitReader(AComponent):
         self.path = path
         self.output_vars = outputs
         self.dataset = None
-
+        self.data = None
         self._time = datetime(1900, 1, 1) if time is None else time
-
         self._status = ComponentStatus.CREATED
 
-    def initialize(self):
-        super().initialize()
+    def _initialize(self):
+        for o in self.output_vars.keys():
+            self.outputs.add(name=o)
+        self.create_connector()
 
-        self._outputs = {o: Output() for o in self.output_vars.keys()}
+    def _connect(self):
+        if self.dataset is None:
+            self.dataset = xr.open_dataset(self.path)
+            self.data = {}
+            for name, pars in self.output_vars.items():
+                info, grid = extract_grid(self.dataset, pars, pars.fixed)
+                grid.name = name
+                self.data[name] = (info, grid)
 
-        self._status = ComponentStatus.INITIALIZED
+        self.try_connect(
+            time=self._time,
+            push_infos={name: value[0] for name, value in self.data.items()},
+            push_data={name: value[1] for name, value in self.data.items()},
+        )
 
-    def connect(self):
-        super().connect()
+        if self.status == ComponentStatus.CONNECTED:
+            del self.data
+            self.dataset.close()
+            del self.dataset
 
-        self.dataset = xr.open_dataset(self.path)
-        for name, pars in self.output_vars.items():
-            grid = extract_grid(self.dataset, pars, pars.fixed)
-            self._outputs[name].push_data(grid, self._time)
+    def _validate(self):
+        pass
 
-        self._status = ComponentStatus.CONNECTED
+    def _update(self):
+        pass
 
-    def validate(self):
-        super().validate()
-        self._status = ComponentStatus.VALIDATED
-
-    def update(self):
-        super().update()
-        self._status = ComponentStatus.UPDATED
-
-    def finalize(self):
-        super().finalize()
-
-        self.dataset.close()
-
-        self._status = ComponentStatus.FINALIZED
+    def _finalize(self):
+        pass
 
 
 class NetCdfTimeReader(ATimeComponent):
@@ -118,6 +118,7 @@ class NetCdfTimeReader(ATimeComponent):
         self.time_callback = time_callback
         self.time_limits = time_limits
         self.dataset = None
+        self.data = None
         self.times = None
 
         self.time_index = None
@@ -127,60 +128,69 @@ class NetCdfTimeReader(ATimeComponent):
 
         self._status = ComponentStatus.CREATED
 
-    def initialize(self):
-        super().initialize()
+    def _initialize(self):
+        for o in self.output_vars.keys():
+            self.outputs.add(name=o)
+        self.create_connector()
 
-        self._outputs = {o: Output() for o in self.output_vars.keys()}
+    def _connect(self):
+        if self.dataset is None:
+            self.dataset = xr.open_dataset(self.path)
+            self.data = {}
+            times = self.dataset.coords[self.time_var].dt
 
-        self._status = ComponentStatus.INITIALIZED
+            if self.time_limits is None:
+                self.time_indices = list(range(times.date.data.shape[0]))
+            else:
+                self.time_indices = []
+                mn = self.time_limits[0]
+                mx = self.time_limits[1]
+                for i, (d, t) in enumerate(zip(times.date.data, times.time.data)):
+                    tt = datetime.combine(d, t)
+                    if (mn is None or tt >= mn) and (mx is None or tt <= mx):
+                        self.time_indices.append(i)
 
-    def connect(self):
-        super().connect()
+            self.times = [
+                datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
+            ]
 
-        self.dataset = xr.open_dataset(self.path)
+            for i in range(len(self.times) - 1):
+                if self.times[i] >= self.times[i + 1]:
+                    raise ValueError(
+                        f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
+                    )
 
-        times = self.dataset.coords[self.time_var].dt
+            if self.time_callback is None:
+                self.time_index = 0
+                t = self.times[self.time_indices[self.time_index]]
+                self._time = datetime.combine(t.date(), t.time())
+            else:
+                self._time, self.time_index = self.time_callback(self.step, None, None)
 
-        if self.time_limits is None:
-            self.time_indices = list(range(times.date.data.shape[0]))
-        else:
-            self.time_indices = []
-            mn = self.time_limits[0]
-            mx = self.time_limits[1]
-            for i, (d, t) in enumerate(zip(times.date.data, times.time.data)):
-                tt = datetime.combine(d, t)
-                if (mn is None or tt >= mn) and (mx is None or tt <= mx):
-                    self.time_indices.append(i)
-
-        self.times = [
-            datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
-        ]
-        for i in range(len(self.times) - 1):
-            if self.times[i] >= self.times[i + 1]:
-                raise ValueError(
-                    f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
+            for name, pars in self.output_vars.items():
+                info, grid = extract_grid(
+                    self.dataset,
+                    pars,
+                    {self.time_var: self.time_indices[self.time_index]},
                 )
+                grid.name = name
+                if self.time_callback is not None:
+                    grid = get_data(grid)
+                self.data[name] = (info, grid)
 
-        if self.time_callback is None:
-            self.time_index = 0
-            self._time = self.times[self.time_indices[self.time_index]]
-        else:
-            self._time, self.time_index = self.time_callback(self.step, None, None)
+        self.try_connect(
+            time=self._time,
+            push_infos={name: value[0] for name, value in self.data.items()},
+            push_data={name: value[1] for name, value in self.data.items()},
+        )
 
-        for name, pars in self.output_vars.items():
-            grid = extract_grid(
-                self.dataset, pars, {self.time_var: self.time_indices[self.time_index]}
-            )
-            self._outputs[name].push_data(grid, self._time)
+        if self.status == ComponentStatus.CONNECTED:
+            del self.data
 
-        self._status = ComponentStatus.CONNECTED
+    def _validate(self):
+        pass
 
-    def validate(self):
-        super().validate()
-        self._status = ComponentStatus.VALIDATED
-
-    def update(self):
-        super().update()
+    def _update(self):
         self.step += 1
 
         if self.time_callback is None:
@@ -193,13 +203,14 @@ class NetCdfTimeReader(ATimeComponent):
             self._time, self.time_index = self.time_callback(
                 self.step, self._time, self.time_index
             )
-
         for name, pars in self.output_vars.items():
-            grid = extract_grid(self.dataset, pars, {self.time_var: self.time_index})
+            _info, grid = extract_grid(
+                self.dataset, pars, {self.time_var: self.time_indices[self.time_index]}
+            )
+            grid.name = name
+            if self.time_callback is not None:
+                grid = get_data(grid)
             self._outputs[name].push_data(grid, self._time)
 
-        self._status = ComponentStatus.UPDATED
-
-    def finalize(self):
-        super().finalize()
-        self._status = ComponentStatus.FINALIZED
+    def _finalize(self):
+        self.dataset.close()
