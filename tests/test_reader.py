@@ -24,7 +24,6 @@ class TestReader(unittest.TestCase):
         reader = NetCdfInitReader(
             path,
             {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
-            time=datetime(1901, 1, 1, 0, 1, 0),
         )
         consumer = DebugConsumer(
             {"Input": Info(grid=None, units=None)},

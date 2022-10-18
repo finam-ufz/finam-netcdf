@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 
+import finam as fm
 from finam.adapters.time import LinearInterpolation
-from finam.core.schedule import Composition
-from finam.modules.visual import grid
+from finam_plot import ContourPlot
 
 from finam_netcdf import Layer
 from finam_netcdf.reader import NetCdfTimeReader
@@ -11,14 +11,12 @@ if __name__ == "__main__":
     path = "tests/data/lai.nc"
 
     reader = NetCdfTimeReader(
-        path, {"LAI": Layer(var="lai", x="lon", y="lat")}, time_var="time"
+        path, {"LAI": Layer(var="lai", xyz=("lon", "lat"))}, time_var="time"
     )
 
-    viewer = grid.TimedGridView(
-        start=datetime(1901, 1, 1, 0, 1), step=timedelta(seconds=5)
-    )
+    viewer = ContourPlot()
 
-    composition = Composition([reader, viewer])
+    composition = fm.Composition([reader, viewer])
     composition.initialize()
 
     _ = reader.outputs["LAI"] >> LinearInterpolation() >> viewer.inputs["Grid"]
