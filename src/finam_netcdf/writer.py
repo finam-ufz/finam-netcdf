@@ -4,14 +4,14 @@ NetCDF writer components.
 from datetime import datetime, timedelta
 from functools import partial
 
+import finam as fm
 import numpy as np
 import xarray as xr
-from finam import AComponent, ATimeComponent, CallbackInput, ComponentStatus
 
 from .tools import Layer
 
 
-class NetCdfTimedWriter(ATimeComponent):
+class NetCdfTimedWriter(fm.ATimeComponent):
     """
     NetCDF writer component that writes in predefined time intervals.
 
@@ -63,7 +63,7 @@ class NetCdfTimedWriter(ATimeComponent):
         self.time_var = time_var
         self.data_arrays = {}
 
-        self.status = ComponentStatus.CREATED
+        self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
         for inp in self._input_dict.keys():
@@ -74,7 +74,7 @@ class NetCdfTimedWriter(ATimeComponent):
     def _connect(self):
         self.try_connect(time=self._time)
 
-        if self.status != ComponentStatus.CONNECTED:
+        if self.status != fm.ComponentStatus.CONNECTED:
             return
 
         _variables, coords = _extract_vars_dims(
@@ -105,7 +105,7 @@ class NetCdfTimedWriter(ATimeComponent):
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
 
 
-class NetCdfPushWriter(AComponent):
+class NetCdfPushWriter(fm.AComponent):
     """
     NetCDF writer component that writes on push to its inputs.
 
@@ -148,12 +148,12 @@ class NetCdfPushWriter(AComponent):
 
         self.last_update = None
 
-        self._status = ComponentStatus.CREATED
+        self._status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
         for inp in self._input_dict.keys():
             self.inputs.add(
-                io=CallbackInput(
+                io=fm.CallbackInput(
                     name=inp, callback=partial(self._data_changed, inp), grid=None
                 )
             )
@@ -163,7 +163,7 @@ class NetCdfPushWriter(AComponent):
     def _connect(self):
         self.try_connect(time=datetime(1900, 1, 1))
 
-        if self.status != ComponentStatus.CONNECTED:
+        if self.status != fm.ComponentStatus.CONNECTED:
             return
 
         _variables, coords = _extract_vars_dims(
@@ -188,9 +188,9 @@ class NetCdfPushWriter(AComponent):
 
     def _data_changed(self, name, caller, time):
         if self.status in (
-            ComponentStatus.CONNECTED,
-            ComponentStatus.CONNECTING,
-            ComponentStatus.CONNECTING_IDLE,
+            fm.ComponentStatus.CONNECTED,
+            fm.ComponentStatus.CONNECTING,
+            fm.ComponentStatus.CONNECTING_IDLE,
         ):
             self.last_update = time
             return
@@ -198,7 +198,7 @@ class NetCdfPushWriter(AComponent):
         if not isinstance(time, datetime):
             raise ValueError("Time must be of type datetime")
 
-        if self.status == ComponentStatus.INITIALIZED:
+        if self.status == fm.ComponentStatus.INITIALIZED:
             self.last_update = time
             return
         if time != self.last_update:

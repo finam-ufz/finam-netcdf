@@ -3,14 +3,13 @@ NetCDF reader components.
 """
 from datetime import datetime
 
+import finam as fm
 import xarray as xr
-from finam import AComponent, ATimeComponent, ComponentStatus
-from finam.data import get_data, get_time
 
 from .tools import Layer, extract_grid
 
 
-class NetCdfInitReader(AComponent):
+class NetCdfInitReader(fm.AComponent):
     """
     NetCDF reader component that reads a single 2D data array at startup.
 
@@ -38,7 +37,7 @@ class NetCdfInitReader(AComponent):
         self.dataset = None
         self.data = None
         self._time = None
-        self.status = ComponentStatus.CREATED
+        self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
         for o in self.output_vars.keys():
@@ -53,7 +52,7 @@ class NetCdfInitReader(AComponent):
                 info, grid = extract_grid(self.dataset, pars, pars.fixed)
                 grid.name = name
                 self.data[name] = (info, grid)
-                t = get_time(grid)[0]
+                t = fm.data.get_time(grid)[0]
                 if self._time is None:
                     self._time = t
                 else:
@@ -68,7 +67,7 @@ class NetCdfInitReader(AComponent):
             push_data={name: value[1] for name, value in self.data.items()},
         )
 
-        if self.status == ComponentStatus.CONNECTED:
+        if self.status == fm.ComponentStatus.CONNECTED:
             del self.data
             self.dataset.close()
             del self.dataset
@@ -83,7 +82,7 @@ class NetCdfInitReader(AComponent):
         pass
 
 
-class NetCdfTimeReader(ATimeComponent):
+class NetCdfTimeReader(fm.ATimeComponent):
     """
     NetCDF reader component that steps along a date/time coordinate dimension of a dataset.
 
@@ -131,7 +130,7 @@ class NetCdfTimeReader(ATimeComponent):
         self._time = None
         self.step = 0
 
-        self._status = ComponentStatus.CREATED
+        self._status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
         for o in self.output_vars.keys():
@@ -180,7 +179,7 @@ class NetCdfTimeReader(ATimeComponent):
                 )
                 grid.name = name
                 if self.time_callback is not None:
-                    grid = get_data(grid)
+                    grid = fm.data.get_data(grid)
                 self.data[name] = (info, grid)
 
         self.try_connect(
@@ -189,7 +188,7 @@ class NetCdfTimeReader(ATimeComponent):
             push_data={name: value[1] for name, value in self.data.items()},
         )
 
-        if self.status == ComponentStatus.CONNECTED:
+        if self.status == fm.ComponentStatus.CONNECTED:
             del self.data
 
     def _validate(self):
@@ -201,7 +200,7 @@ class NetCdfTimeReader(ATimeComponent):
         if self.time_callback is None:
             self.time_index += 1
             if self.time_index >= len(self.time_indices):
-                self._status = ComponentStatus.FINISHED
+                self._status = fm.ComponentStatus.FINISHED
                 return
             self._time = self.times[self.time_indices[self.time_index]]
         else:
@@ -214,7 +213,7 @@ class NetCdfTimeReader(ATimeComponent):
             )
             grid.name = name
             if self.time_callback is not None:
-                grid = get_data(grid)
+                grid = fm.data.get_data(grid)
             self._outputs[name].push_data(grid, self._time)
 
     def _finalize(self):

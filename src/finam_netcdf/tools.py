@@ -1,14 +1,8 @@
 """NetCDF helper classes and functions"""
 import copy
 
+import finam as fm
 import numpy as np
-from finam import Info, Location, RectilinearGrid, UniformGrid
-from finam.data import (
-    check_axes_monotonicity,
-    check_axes_uniformity,
-    has_time,
-    quantify,
-)
 
 
 class Layer:
@@ -49,7 +43,7 @@ def extract_grid(dataset, layer, fixed=None):
             )
 
     axes = [ax.data for ax in xyz]
-    axes_increase = check_axes_monotonicity(axes)
+    axes_increase = fm.data.check_axes_monotonicity(axes)
 
     # re-order axes to xyz
     xdata = xdata.transpose(*layer.xyz)
@@ -61,32 +55,32 @@ def extract_grid(dataset, layer, fixed=None):
             xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
 
     # calculate properties of uniform grids
-    spacing = check_axes_uniformity(axes)
+    spacing = fm.data.check_axes_uniformity(axes)
     origin = [ax[0] for ax in axes]
     is_uniform = not any(np.isnan(spacing))
 
     # note: we use point-associated data here.
     if is_uniform:
         dims = [len(ax) for ax in axes]
-        grid = UniformGrid(
+        grid = fm.UniformGrid(
             dims,
             axes_names=layer.xyz,
             spacing=tuple(spacing),
             origin=tuple(origin),
-            data_location=Location.POINTS,
+            data_location=fm.Location.POINTS,
         )
     else:
-        grid = RectilinearGrid(
-            axes, axes_names=layer.xyz, data_location=Location.POINTS
+        grid = fm.RectilinearGrid(
+            axes, axes_names=layer.xyz, data_location=fm.Location.POINTS
         )
 
-    xdata = quantify(xdata)
+    xdata = fm.data.quantify(xdata)
 
     # re-insert the time dimension
-    if has_time(xdata):
+    if fm.data.has_time(xdata):
         xdata = xdata.expand_dims(dim="time", axis=0)
 
     meta = copy.copy(xdata.attrs)
-    info = Info(grid=grid, meta=meta)
+    info = fm.Info(grid=grid, meta=meta)
 
     return info, xdata
