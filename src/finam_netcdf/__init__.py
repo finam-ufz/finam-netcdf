@@ -33,17 +33,17 @@ def extract_grid(dataset, layer, fixed=None):
     xyz = [variable.coords[ax] for ax in layer.xyz]
 
     fx = layer.fixed if fixed is None else dict(layer.fixed, **fixed)
-    extr = variable.isel(fx)
+    xdata = variable.isel(fx)
 
-    if len(extr.dims) > 3:
+    if len(xdata.dims) > 3:
         raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
-    if len(extr.dims) != len(layer.xyz):
+    if len(xdata.dims) != len(layer.xyz):
         raise ValueError(
             f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
         )
 
     for ax in layer.xyz:
-        if ax not in extr.dims:
+        if ax not in xdata.dims:
             raise ValueError(
                 f"Dimension {ax} not available for NetCDF variable {layer.var}"
             )
@@ -52,7 +52,7 @@ def extract_grid(dataset, layer, fixed=None):
     axes_increase = check_axes_monotonicity(axes)
 
     # re-order axes to xyz
-    xdata = extr.transpose(*layer.xyz)
+    xdata = xdata.transpose(*layer.xyz)
 
     # flip to make all axes increasing
     for i, is_increase in enumerate(axes_increase):

@@ -5,10 +5,8 @@ from datetime import datetime, timedelta
 from functools import partial
 
 import numpy as np
-import pandas as pd
 import xarray as xr
-from finam import AComponent, ATimeComponent, CallbackInput, ComponentStatus, Input
-from numpy import datetime64
+from finam import AComponent, ATimeComponent, CallbackInput, ComponentStatus
 
 from . import Layer
 
@@ -79,7 +77,7 @@ class NetCdfTimedWriter(ATimeComponent):
         if self.status != ComponentStatus.CONNECTED:
             return
 
-        variables, coords = extract_vars_dims(
+        _variables, coords = _extract_vars_dims(
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
@@ -156,7 +154,7 @@ class NetCdfPushWriter(AComponent):
         for inp in self._input_dict.keys():
             self.inputs.add(
                 io=CallbackInput(
-                    name=inp, callback=partial(self.data_changed, inp), grid=None
+                    name=inp, callback=partial(self._data_changed, inp), grid=None
                 )
             )
 
@@ -168,7 +166,7 @@ class NetCdfPushWriter(AComponent):
         if self.status != ComponentStatus.CONNECTED:
             return
 
-        variables, coords = extract_vars_dims(
+        _variables, coords = _extract_vars_dims(
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
@@ -188,7 +186,7 @@ class NetCdfPushWriter(AComponent):
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
 
-    def data_changed(self, name, caller, time):
+    def _data_changed(self, name, caller, time):
         if self.status in (
             ComponentStatus.CONNECTED,
             ComponentStatus.CONNECTING,
@@ -206,7 +204,7 @@ class NetCdfPushWriter(AComponent):
         if time != self.last_update:
             lengths = [a.shape[0] for a in self.data_arrays.values()]
             if lengths.count(lengths[0]) != len(lengths):
-                raise ValueError("Incomplete dataset for time %s" % (self.last_update,))
+                raise ValueError(f"Incomplete dataset for time {self.last_update}")
 
         self.last_update = time
 
@@ -219,7 +217,7 @@ class NetCdfPushWriter(AComponent):
         self.update()
 
 
-def extract_vars_dims(in_infos, in_data, layers):
+def _extract_vars_dims(in_infos, in_data, layers):
     variables = {}
     max_dims = 3
     dims = [{}, {}, {}]
@@ -228,7 +226,7 @@ def extract_vars_dims(in_infos, in_data, layers):
         layer = layers[name]
 
         if layer.var in variables:
-            raise ValueError("Duplicate variable %s." % (layer.var,))
+            raise ValueError(f"Duplicate variable {layer.var}.")
 
         grid_info = in_infos[name].grid
         variables[layer.var] = layer, data.dtype
@@ -236,15 +234,14 @@ def extract_vars_dims(in_infos, in_data, layers):
         for i, ax in enumerate(layer.xyz):
             if ax not in grid_info.axes_names:
                 raise ValueError(
-                    "Dimension %d '%s' is not in the data for input %s. "
-                    "Available axes are %s" % (i, ax, name, grid_info.axes_names)
+                    f"Dimension {i} '{ax}' is not in the data for input {name}. "
+                    f"Available axes are {grid_info.axes_names}"
                 )
             for j in range(max_dims):
                 if i != j and ax in dims[j]:
                     raise ValueError(
-                        "Dimension %d '%s' is already defined. "
-                        "Definition differs from data provided by input '%s'"
-                        % (i, ax, name)
+                        f"Dimension {i} '{ax}' is already defined. "
+                        f"Definition differs from data provided by input {name}"
                     )
             curr_dim = dims[i]
             axis_values = in_infos[name].grid.data_axes[i]
@@ -252,9 +249,8 @@ def extract_vars_dims(in_infos, in_data, layers):
                 axis = curr_dim[ax]
                 if not np.allclose(axis_values, axis):
                     raise ValueError(
-                        "Dimension %d '%s' is already defined. "
-                        "Definition differs from data provided by input '%s'"
-                        % (i, ax, name)
+                        f"Dimension {i} '{ax}' is already defined. "
+                        f"Definition differs from data provided by input {name}"
                     )
             else:
                 curr_dim[ax] = axis_values

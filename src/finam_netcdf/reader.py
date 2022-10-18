@@ -4,7 +4,7 @@ NetCDF reader components.
 from datetime import datetime
 
 import xarray as xr
-from finam import AComponent, ATimeComponent, ComponentStatus, Output
+from finam import AComponent, ATimeComponent, ComponentStatus
 from finam.data import get_data
 
 from . import Layer, extract_grid
