@@ -43,13 +43,12 @@ def extract_grid(dataset, layer, fixed=None):
             )
 
     axes = [ax.data for ax in xyz]
-    axes_increase = fm.data.check_axes_monotonicity(axes)
 
     # re-order axes to xyz
     xdata = xdata.transpose(*layer.xyz)
 
     # flip to make all axes increasing
-    for i, is_increase in enumerate(axes_increase):
+    for i, is_increase in enumerate(fm.data.check_axes_monotonicity(axes)):
         if not is_increase:
             ax_name = layer.xyz[i]
             xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
@@ -61,17 +60,18 @@ def extract_grid(dataset, layer, fixed=None):
 
     # note: we use point-associated data here.
     if is_uniform:
-        dims = [len(ax) for ax in axes]
+        dims = [len(ax) + 1 for ax in axes]
         grid = fm.UniformGrid(
             dims,
             axes_names=layer.xyz,
             spacing=tuple(spacing),
-            origin=tuple(origin),
-            data_location=fm.Location.POINTS,
+            origin=tuple(o - 0.5 * s for o, s in zip(origin, spacing)),
+            data_location=fm.Location.CELLS,
         )
     else:
+        point_axes = [create_point_axis(ax) for ax in axes]
         grid = fm.RectilinearGrid(
-            axes, axes_names=layer.xyz, data_location=fm.Location.POINTS
+            point_axes, axes_names=layer.xyz, data_location=fm.Location.CELLS
         )
 
     xdata = fm.data.quantify(xdata)
@@ -84,3 +84,12 @@ def extract_grid(dataset, layer, fixed=None):
     info = fm.Info(grid=grid, meta=meta)
 
     return info, xdata
+
+
+def create_point_axis(cell_axis):
+    """Create a point axis from a cell axis"""
+    diffs = np.diff(cell_axis)
+    mid = cell_axis[:-1] + diffs / 2
+    first = cell_axis[0] - diffs[0] / 2
+    last = cell_axis[-1] + diffs[-1] / 2
+    return np.concatenate(([first], mid, [last]))
