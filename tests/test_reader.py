@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timedelta
 
 import xarray as xr
-from finam import Composition, Info, UniformGrid
+from finam import Composition, Info, Location, UniformGrid
 from finam.modules.debug import DebugConsumer
 
 from finam_netcdf import NetCdfInitReader, NetCdfTimeReader
@@ -10,15 +10,6 @@ from finam_netcdf.tools import Layer, extract_grid
 
 
 class TestReader(unittest.TestCase):
-    def test_read_grid(self):
-        path = "tests/data/lai.nc"
-        dataset = xr.open_dataset(path)
-        layer = Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})
-
-        info, data = extract_grid(dataset, layer)
-
-        self.assertTrue(isinstance(info.grid, UniformGrid))
-
     def test_init_reader(self):
         path = "tests/data/lai.nc"
         reader = NetCdfInitReader(
