@@ -66,9 +66,6 @@ def extract_grid(dataset, layer, fixed=None):
     is_uniform = not any(np.isnan(spacing))
 
     # note: we use point-associated data here.
-    # Not sure if this is intended.
-    # Could also calculate points for cell data.
-    # Not sure if this is unambiguous for edges for rectilinear grids.
     if is_uniform:
         dims = [len(ax) for ax in axes]
         grid = UniformGrid(
