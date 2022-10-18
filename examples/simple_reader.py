@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import finam as fm
-from finam_plot import C
+import matplotlib.pyplot as plt
+from finam_plot import ContourPlot
 
 from finam_netcdf import Layer
 from finam_netcdf.reader import NetCdfInitReader
@@ -10,14 +11,17 @@ if __name__ == "__main__":
     path = "tests/data/lai.nc"
 
     reader = NetCdfInitReader(
-        path, {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})}
+        path,
+        {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
     )
 
-    viewer = grid.TimedGridView(start=datetime(2000, 1, 1), step=timedelta(days=1))
+    viewer = ContourPlot()
 
-    composition = Composition([reader, viewer])
+    composition = fm.Composition([reader, viewer])
     composition.initialize()
 
     _ = reader.outputs["LAI"] >> viewer.inputs["Grid"]
 
     composition.run(datetime(2000, 7, 1))
+
+    plt.show(block=True)

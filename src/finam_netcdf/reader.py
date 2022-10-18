@@ -5,7 +5,7 @@ from datetime import datetime
 
 import xarray as xr
 from finam import AComponent, ATimeComponent, ComponentStatus
-from finam.data import get_data
+from finam.data import get_data, get_time
 
 from .tools import Layer, extract_grid
 
@@ -24,7 +24,7 @@ class NetCdfInitReader(AComponent):
        )
     """
 
-    def __init__(self, path: str, outputs: dict[str, Layer], time: datetime = None):
+    def __init__(self, path: str, outputs: dict[str, Layer]):
         """
         Constructs a NetCDF reader for reading a single data grid.
 
@@ -33,15 +33,12 @@ class NetCdfInitReader(AComponent):
         :param time: starting time stamp. Optional. Default '1900-01-01'.
         """
         super().__init__()
-        if time is not None and not isinstance(time, datetime):
-            raise ValueError("Time must be None or of type datetime")
-
         self.path = path
         self.output_vars = outputs
         self.dataset = None
         self.data = None
-        self._time = datetime(1900, 1, 1) if time is None else time
-        self._status = ComponentStatus.CREATED
+        self._time = None
+        self.status = ComponentStatus.CREATED
 
     def _initialize(self):
         for o in self.output_vars.keys():
@@ -56,6 +53,14 @@ class NetCdfInitReader(AComponent):
                 info, grid = extract_grid(self.dataset, pars, pars.fixed)
                 grid.name = name
                 self.data[name] = (info, grid)
+                t = get_time(grid)[0]
+                if self._time is None:
+                    self._time = t
+                else:
+                    if self._time != t:
+                        raise ValueError(
+                            "Can't work with NetCDF variables with different timestamps"
+                        )
 
         self.try_connect(
             time=self._time,
