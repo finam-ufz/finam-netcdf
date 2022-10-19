@@ -3,8 +3,6 @@
 FINAM components for reading and writing spatial and temporal data from and to [NetCFD](https://www.unidata.ucar.edu/software/netcdf/) files.
 Supports reading and writing regular 2-dimensional raster data from and to multidimensional datasets.
 
-All components use finam's `Grid` type for data exchange.
-
 ## Installation
 
 ```shell
@@ -27,17 +25,16 @@ Both components can read multiple variables from a single dataset.
 #### `NetCdfInitReader`
 
 Reads once during initialization of the coupling setup.
-All coordinate dimensions except `x` and `y` must be fixed at a certain index.
+All coordinate dimensions except those in `xyz` must be fixed at a certain index.
 
 ```python
-from finam_netcdf import Layer
-from finam_netcdf.reader import NetCdfInitReader
+from finam_netcdf import Layer, NetCdfInitReader
 
 path = "tests/data/lai.nc"
 reader = NetCdfInitReader(
     path=path,
     outputs={
-        "LAI": Layer(var="lai", x="lon", y="lat", fixed={"time": 0}),
+        "LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0}),
     }
 )
 ```
@@ -45,7 +42,7 @@ reader = NetCdfInitReader(
 #### `NetCdfTimeReader`
 
 Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also [Time manipulation](#time-manipulation)).
-All coordinate dimensions except `x`, `y` and `time` must be fixed at a certain index.
+All coordinate dimensions except those in `xyz` and `time` must be fixed at a certain index.
 
 ```python
 from finam_netcdf import Layer
@@ -54,7 +51,7 @@ from finam_netcdf.reader import NetCdfTimeReader
 path = "tests/data/lai.nc"
 reader = NetCdfTimeReader(
     path=path, 
-    outputs={"LAI": Layer(var="lai", x="lon", y="lat")},
+    outputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
     time_var="time"
 )
 ```
@@ -82,7 +79,7 @@ def to_time_step(tick, _last_time, _last_index):
 path = "tests/data/lai.nc"
 reader = NetCdfTimeReader(
     path=path, 
-    outputs={"LAI": Layer(var="lai", x="lon", y="lat")},
+    outputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
     time_var="time",
     time_callback=to_time_step,
 )
@@ -111,13 +108,12 @@ Writes time slices regularly, irrespective of input time steps.
 
 ```python
 from datetime import datetime, timedelta
-from finam_netcdf import Layer
-from finam_netcdf.writer import NetCdfTimedWriter
+from finam_netcdf import Layer, NetCdfTimedWriter
 
 path = "tests/data/out.nc"
 reader = NetCdfTimedWriter(
     path=path,
-    inputs={"LAI": Layer(var="lai", x="lon", y="lat")},
+    inputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
     time_var="time",
     start=datetime(2000, 1, 1),
     step=timedelta(days=1),
@@ -130,13 +126,12 @@ Writes time slices as soon as new data becomes available to the inputs.
 Note that all input data sources must have the same time step!
 
 ```python
-from finam_netcdf import Layer
-from finam_netcdf.writer import NetCdfPushWriter
+from finam_netcdf import Layer, NetCdfPushWriter
 
 path = "tests/data/out.nc"
 reader = NetCdfPushWriter(
     path=path,
-    inputs={"LAI": Layer(var="lai", x="lon", y="lat")},
+    inputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
     time_var="time"
 )
 ```
