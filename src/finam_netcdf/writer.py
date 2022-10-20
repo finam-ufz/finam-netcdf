@@ -11,7 +11,7 @@ import xarray as xr
 from .tools import Layer
 
 
-class NetCdfTimedWriter(fm.ATimeComponent):
+class NetCdfTimedWriter(fm.TimeComponent):
     """
     NetCDF writer component that writes in predefined time intervals.
 
@@ -105,7 +105,7 @@ class NetCdfTimedWriter(fm.ATimeComponent):
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
 
 
-class NetCdfPushWriter(fm.AComponent):
+class NetCdfPushWriter(fm.Component):
     """
     NetCDF writer component that writes on push to its inputs.
 

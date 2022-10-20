@@ -1,7 +1,6 @@
 import unittest
 from datetime import datetime, timedelta
 
-import xarray as xr
 from finam import Composition, Info, Location, UniformGrid
 from finam.modules.debug import DebugConsumer
 
