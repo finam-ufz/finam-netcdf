@@ -16,7 +16,7 @@ class TestReader(unittest.TestCase):
             {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
         )
         consumer = DebugConsumer(
-            {"Input": Info(grid=None, units=None)},
+            {"Input": Info(time=None, grid=None, units=None)},
             start=datetime(1901, 1, 1),
             step=timedelta(days=1),
         )
@@ -35,7 +35,7 @@ class TestReader(unittest.TestCase):
         )
 
         consumer = DebugConsumer(
-            {"Input": Info(grid=None, units=None)},
+            {"Input": Info(time=None, grid=None, units=None)},
             start=datetime(1901, 1, 1, 0, 1),
             step=timedelta(hours=1),
         )
@@ -57,7 +57,7 @@ class TestReader(unittest.TestCase):
         )
 
         consumer = DebugConsumer(
-            {"Input": Info(grid=None, units=None)},
+            {"Input": Info(time=None, grid=None, units=None)},
             start=datetime(1901, 1, 1, 0, 1),
             step=timedelta(hours=1),
         )
@@ -82,7 +82,7 @@ class TestReader(unittest.TestCase):
         )
 
         consumer = DebugConsumer(
-            {"Input": Info(grid=None, units=None)},
+            {"Input": Info(time=None, grid=None, units=None)},
             start=datetime(2000, 1, 1),
             step=timedelta(days=1),
         )

@@ -81,7 +81,7 @@ def extract_grid(dataset, layer, fixed=None):
         xdata = xdata.expand_dims(dim="time", axis=0)
 
     meta = copy.copy(xdata.attrs)
-    info = fm.Info(grid=grid, meta=meta)
+    info = fm.Info(time=fm.data.get_time(xdata)[0], grid=grid, meta=meta)
 
     return info, xdata
 

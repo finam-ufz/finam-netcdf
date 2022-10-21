@@ -24,12 +24,12 @@ if __name__ == "__main__":
     file = os.path.join(directory, "test.nc")
 
     lai_gen = CallbackGenerator(
-        callbacks={"LAI": (lambda t: random_grid(grid), fm.Info(grid))},
+        callbacks={"LAI": (lambda t: random_grid(grid), fm.Info(None, grid))},
         start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )
     sm_gen = CallbackGenerator(
-        callbacks={"SM": (lambda t: random_grid(grid), fm.Info(grid))},
+        callbacks={"SM": (lambda t: random_grid(grid), fm.Info(None, grid))},
         start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )

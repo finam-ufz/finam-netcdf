@@ -52,17 +52,15 @@ class NetCdfInitReader(fm.Component):
                 info, grid = extract_grid(self.dataset, pars, pars.fixed)
                 grid.name = name
                 self.data[name] = (info, grid)
-                t = fm.data.get_time(grid)[0]
                 if self._time is None:
-                    self._time = t
+                    self._time = info.time
                 else:
-                    if self._time != t:
+                    if self._time != info.time:
                         raise ValueError(
                             "Can't work with NetCDF variables with different timestamps"
                         )
 
         self.try_connect(
-            time=self._time,
             push_infos={name: value[0] for name, value in self.data.items()},
             push_data={name: value[1] for name, value in self.data.items()},
         )

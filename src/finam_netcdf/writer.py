@@ -67,9 +67,9 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     def _initialize(self):
         for inp in self._input_dict.keys():
-            self.inputs.add(name=inp, grid=None, units=None)
+            self.inputs.add(name=inp, time=self.time, grid=None, units=None)
 
-        self.create_connector(required_in_data=list(self._input_dict.keys()))
+        self.create_connector(pull_data=list(self._input_dict.keys()))
 
     def _connect(self):
         self.try_connect(time=self._time)
@@ -156,12 +156,13 @@ class NetCdfPushWriter(fm.Component):
                 io=fm.CallbackInput(
                     name=inp,
                     callback=partial(self._data_changed, inp),
+                    time=None,
                     grid=None,
                     units=None,
                 )
             )
 
-        self.create_connector(required_in_data=list(self._input_dict.keys()))
+        self.create_connector(pull_data=list(self._input_dict.keys()))
 
     def _connect(self):
         self.try_connect(time=datetime(1900, 1, 1))
