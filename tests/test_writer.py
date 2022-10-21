@@ -27,12 +27,12 @@ class TestWriter(unittest.TestCase):
             file = path.join(tmp, "test.nc")
 
             source1 = CallbackGenerator(
-                callbacks={"Grid": (lambda t: generate_grid(grid), Info(grid))},
+                callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
             source2 = CallbackGenerator(
-                callbacks={"Grid": (lambda t: generate_grid(grid), Info(grid))},
+                callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
@@ -78,12 +78,12 @@ class TestWriter(unittest.TestCase):
             file = path.join(tmp, "test.nc")
 
             source1 = CallbackGenerator(
-                callbacks={"Grid": (lambda t: generate_grid(grid), Info(grid))},
+                callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
             source2 = CallbackGenerator(
-                callbacks={"Grid": (lambda t: generate_grid(grid), Info(grid))},
+                callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
@@ -130,12 +130,12 @@ class TestWriter(unittest.TestCase):
             file = path.join(tmp, "test.nc")
 
             source1 = CallbackGenerator(
-                callbacks={"Grid": (lambda t: generate_grid(grid), Info(grid))},
+                callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
             source2 = CallbackGenerator(
-                callbacks={"Grid": (lambda t: generate_grid(grid), Info(grid))},
+                callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=2),
             )
