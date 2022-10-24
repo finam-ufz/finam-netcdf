@@ -3,10 +3,8 @@ from datetime import datetime, timedelta
 
 import finam as fm
 import numpy as np
-from finam.modules.generators import CallbackGenerator
 
-from finam_netcdf import Layer
-from finam_netcdf.writer import NetCdfTimedWriter
+from finam_netcdf import Layer, NetCdfTimedWriter
 
 
 def random_grid(grid):
@@ -23,12 +21,12 @@ if __name__ == "__main__":
 
     file = os.path.join(directory, "test.nc")
 
-    lai_gen = CallbackGenerator(
+    lai_gen = fm.modules.CallbackGenerator(
         callbacks={"LAI": (lambda t: random_grid(grid), fm.Info(None, grid))},
         start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )
-    sm_gen = CallbackGenerator(
+    sm_gen = fm.modules.CallbackGenerator(
         callbacks={"SM": (lambda t: random_grid(grid), fm.Info(None, grid))},
         start=datetime(2000, 1, 1),
         step=timedelta(days=1),

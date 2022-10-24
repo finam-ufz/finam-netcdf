@@ -4,8 +4,7 @@ import finam as fm
 import matplotlib.pyplot as plt
 from finam_plot import ContourPlot
 
-from finam_netcdf import Layer
-from finam_netcdf.reader import NetCdfInitReader
+from finam_netcdf import Layer, NetCdfInitReader
 
 if __name__ == "__main__":
     path = "tests/data/lai.nc"

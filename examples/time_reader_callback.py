@@ -1,7 +1,6 @@
 from datetime import datetime
 
 import finam as fm
-from finam.adapters.time import LinearInterpolation
 from finam_plot import ContourPlot
 
 from finam_netcdf import Layer
@@ -29,6 +28,6 @@ if __name__ == "__main__":
     composition = fm.Composition([reader, viewer])
     composition.initialize()
 
-    _ = reader.outputs["LAI"] >> LinearInterpolation() >> viewer.inputs["Grid"]
+    _ = reader.outputs["LAI"] >> fm.adapters.LinearTime() >> viewer.inputs["Grid"]
 
     composition.run(datetime(2005, 1, 1))
