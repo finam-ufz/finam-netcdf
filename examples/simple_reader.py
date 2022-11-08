@@ -4,12 +4,12 @@ import finam as fm
 import matplotlib.pyplot as plt
 from finam_plot import ContourPlot
 
-from finam_netcdf import Layer, NetCdfInitReader
+from finam_netcdf import Layer, NetCdfStaticReader
 
 if __name__ == "__main__":
     path = "tests/data/lai.nc"
 
-    reader = NetCdfInitReader(
+    reader = NetCdfStaticReader(
         path,
         {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
     )
@@ -21,6 +21,6 @@ if __name__ == "__main__":
 
     _ = reader.outputs["LAI"] >> viewer.inputs["Grid"]
 
-    composition.run(datetime(2000, 7, 1))
+    composition.run()
 
     plt.show(block=True)

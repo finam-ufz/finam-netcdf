@@ -10,8 +10,7 @@ class Layer:
     Defines a NetCDF layer (2D data array).
 
     :param var: layer variable
-    :param x: x coordinate variable
-    :param y: y coordinate variable
+    :param xyz: coordinate variables in xyz order
     :param fixed: dictionary for further, fixed index coordinate variables (e.g. 'time')
     """
 
@@ -77,11 +76,13 @@ def extract_grid(dataset, layer, fixed=None):
     xdata = fm.data.quantify(xdata)
 
     # re-insert the time dimension
+    time = None
     if fm.data.has_time(xdata):
         xdata = xdata.expand_dims(dim="time", axis=0)
+        time = fm.data.get_time(xdata)[0]
 
     meta = copy.copy(xdata.attrs)
-    info = fm.Info(time=fm.data.get_time(xdata)[0], grid=grid, meta=meta)
+    info = fm.Info(time=time, grid=grid, meta=meta)
 
     return info, xdata
 

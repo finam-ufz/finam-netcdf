@@ -9,7 +9,7 @@ import xarray as xr
 from .tools import Layer, extract_grid
 
 
-class NetCdfInitReader(fm.Component):
+class NetCdfStaticReader(fm.Component):
     """
     NetCDF reader component that reads a single 2D data array at startup.
 
@@ -41,7 +41,7 @@ class NetCdfInitReader(fm.Component):
 
     def _initialize(self):
         for o in self.output_vars.keys():
-            self.outputs.add(name=o)
+            self.outputs.add(name=o, static=True)
         self.create_connector()
 
     def _connect(self):
@@ -80,7 +80,7 @@ class NetCdfInitReader(fm.Component):
         pass
 
 
-class NetCdfTimeReader(fm.TimeComponent):
+class NetCdfReader(fm.TimeComponent):
     """
     NetCDF reader component that steps along a date/time coordinate dimension of a dataset.
 

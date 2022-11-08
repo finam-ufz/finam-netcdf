@@ -4,7 +4,7 @@ import finam as fm
 from finam_plot import ContourPlot
 
 from finam_netcdf import Layer
-from finam_netcdf.reader import NetCdfTimeReader
+from finam_netcdf.reader import NetCdfReader
 
 if __name__ == "__main__":
     start = datetime(2000, 1, 1)
@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     path = "tests/data/lai.nc"
 
-    reader = NetCdfTimeReader(
+    reader = NetCdfReader(
         path,
         {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
         time_var="time",

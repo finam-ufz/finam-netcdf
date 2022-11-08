@@ -28,10 +28,10 @@ Reads once during initialization of the coupling setup.
 All coordinate dimensions except those in `xyz` must be fixed at a certain index.
 
 ```python
-from finam_netcdf import Layer, NetCdfInitReader
+from finam_netcdf import Layer, NetCdfStaticReader
 
 path = "tests/data/lai.nc"
-reader = NetCdfInitReader(
+reader = NetCdfStaticReader(
     path=path,
     outputs={
         "LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0}),
@@ -46,11 +46,11 @@ All coordinate dimensions except those in `xyz` and `time` must be fixed at a ce
 
 ```python
 from finam_netcdf import Layer
-from finam_netcdf.reader import NetCdfTimeReader
+from finam_netcdf.reader import NetCdfReader
 
 path = "tests/data/lai.nc"
-reader = NetCdfTimeReader(
-    path=path, 
+reader = NetCdfReader(
+    path=path,
     outputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
     time_var="time"
 )
@@ -67,18 +67,20 @@ This example cycles through the 12 rasters every year:
 ```python
 from datetime import datetime
 from finam_netcdf import Layer
-from finam_netcdf.reader import NetCdfTimeReader
+from finam_netcdf.reader import NetCdfReader
 
 start = datetime(2000, 1, 1)
+
 
 def to_time_step(tick, _last_time, _last_index):
     year = start.year + tick // 12
     month = 1 + tick % 12
     return datetime(year, month, 1), tick % 12
 
+
 path = "tests/data/lai.nc"
-reader = NetCdfTimeReader(
-    path=path, 
+reader = NetCdfReader(
+    path=path,
     outputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
     time_var="time",
     time_callback=to_time_step,
