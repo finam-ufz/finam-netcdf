@@ -65,6 +65,10 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         self.status = fm.ComponentStatus.CREATED
 
+    @property
+    def next_time(self):
+        return self.time + self._step
+
     def _initialize(self):
         for inp in self._input_dict.keys():
             self.inputs.add(name=inp, time=self.time, grid=None, units=None)
@@ -90,6 +94,8 @@ class NetCdfTimedWriter(fm.TimeComponent):
         pass
 
     def _update(self):
+        self._time += self._step
+
         for name, inp in self.inputs.items():
             layer = self._input_dict[name]
             new_var = inp.pull_data(self.time)
@@ -97,8 +103,6 @@ class NetCdfTimedWriter(fm.TimeComponent):
             var = self.data_arrays[layer.var]
 
             self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
-
-        self._time += self._step
 
     def _finalize(self):
         dataset = xr.Dataset(data_vars=self.data_arrays)
@@ -165,7 +169,7 @@ class NetCdfPushWriter(fm.Component):
         self.create_connector(pull_data=list(self._input_dict.keys()))
 
     def _connect(self):
-        self.try_connect(time=datetime(1900, 1, 1))
+        self.try_connect()
 
         if self.status != fm.ComponentStatus.CONNECTED:
             return

@@ -1,11 +1,10 @@
 import unittest
 from datetime import datetime, timedelta
 
-from finam import Composition, Info, Location, UniformGrid
-from finam.modules.debug import DebugConsumer
+import finam as fm
 
 from finam_netcdf import NetCdfInitReader, NetCdfTimeReader
-from finam_netcdf.tools import Layer, extract_grid
+from finam_netcdf.tools import Layer
 
 
 class TestReader(unittest.TestCase):
@@ -15,16 +14,20 @@ class TestReader(unittest.TestCase):
             path,
             {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
         )
-        consumer = DebugConsumer(
-            {"Input": Info(time=None, grid=None, units=None)},
-            start=datetime(1901, 1, 1),
+        consumer = fm.modules.DebugConsumer(
+            {"Input": fm.Info(time=None, grid=None, units=None)},
+            start=datetime(1901, 1, 1, 1, 0, 0),
             step=timedelta(days=1),
         )
 
-        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp = fm.Composition([reader, consumer], log_level="DEBUG")
         comp.initialize()
 
-        reader.outputs["LAI"] >> consumer.inputs["Input"]
+        (
+            reader.outputs["LAI"]
+            >> fm.adapters.ExtrapolateTime()
+            >> consumer.inputs["Input"]
+        )
 
         comp.run(datetime(1901, 1, 2))
 
@@ -34,13 +37,13 @@ class TestReader(unittest.TestCase):
             path, {"LAI": Layer(var="lai", xyz=("lon", "lat"))}, time_var="time"
         )
 
-        consumer = DebugConsumer(
-            {"Input": Info(time=None, grid=None, units=None)},
-            start=datetime(1901, 1, 1, 0, 1),
-            step=timedelta(hours=1),
+        consumer = fm.modules.DebugConsumer(
+            {"Input": fm.Info(time=None, grid=None, units=None)},
+            start=datetime(1901, 1, 1, 0, 1, 0),
+            step=timedelta(minutes=1),
         )
 
-        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp = fm.Composition([reader, consumer], log_level="DEBUG")
         comp.initialize()
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
@@ -56,13 +59,13 @@ class TestReader(unittest.TestCase):
             time_limits=(datetime(1901, 1, 1, 0, 8), None),
         )
 
-        consumer = DebugConsumer(
-            {"Input": Info(time=None, grid=None, units=None)},
-            start=datetime(1901, 1, 1, 0, 1),
-            step=timedelta(hours=1),
+        consumer = fm.modules.DebugConsumer(
+            {"Input": fm.Info(time=None, grid=None, units=None)},
+            start=datetime(1901, 1, 1, 0, 8),
+            step=timedelta(minutes=1),
         )
 
-        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp = fm.Composition([reader, consumer], log_level="DEBUG")
         comp.initialize()
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
@@ -81,13 +84,13 @@ class TestReader(unittest.TestCase):
             time_callback=lambda s, _t, _i: (start + s * step, s % 12),
         )
 
-        consumer = DebugConsumer(
-            {"Input": Info(time=None, grid=None, units=None)},
+        consumer = fm.modules.DebugConsumer(
+            {"Input": fm.Info(time=None, grid=None, units=None)},
             start=datetime(2000, 1, 1),
             step=timedelta(days=1),
         )
 
-        comp = Composition([reader, consumer], log_level="DEBUG")
+        comp = fm.Composition([reader, consumer], log_level="DEBUG")
         comp.initialize()
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
