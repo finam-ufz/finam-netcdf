@@ -3,14 +3,14 @@ from datetime import datetime, timedelta
 
 import finam as fm
 
-from finam_netcdf import NetCdfInitReader, NetCdfTimeReader
+from finam_netcdf import NetCdfReader, NetCdfStaticReader
 from finam_netcdf.tools import Layer
 
 
 class TestReader(unittest.TestCase):
     def test_init_reader(self):
         path = "tests/data/lai.nc"
-        reader = NetCdfInitReader(
+        reader = NetCdfStaticReader(
             path,
             {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
         )
@@ -33,7 +33,7 @@ class TestReader(unittest.TestCase):
 
     def test_time_reader(self):
         path = "tests/data/lai.nc"
-        reader = NetCdfTimeReader(
+        reader = NetCdfReader(
             path, {"LAI": Layer(var="lai", xyz=("lon", "lat"))}, time_var="time"
         )
 
@@ -52,7 +52,7 @@ class TestReader(unittest.TestCase):
 
     def test_time_reader_limits(self):
         path = "tests/data/lai.nc"
-        reader = NetCdfTimeReader(
+        reader = NetCdfReader(
             path,
             {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
             time_var="time",
@@ -77,7 +77,7 @@ class TestReader(unittest.TestCase):
         step = timedelta(days=1)
 
         path = "tests/data/lai.nc"
-        reader = NetCdfTimeReader(
+        reader = NetCdfReader(
             path,
             {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
             time_var="time",

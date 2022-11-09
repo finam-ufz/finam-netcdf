@@ -1,11 +1,11 @@
 """NetCDF file I/O components for FINAM"""
-from .reader import NetCdfInitReader, NetCdfTimeReader
+from .reader import NetCdfReader, NetCdfStaticReader
 from .tools import Layer
 from .writer import NetCdfPushWriter, NetCdfTimedWriter
 
 __all__ = [
-    "NetCdfInitReader",
-    "NetCdfTimeReader",
+    "NetCdfStaticReader",
+    "NetCdfReader",
     "NetCdfPushWriter",
     "NetCdfTimedWriter",
     "Layer",
