@@ -38,6 +38,20 @@ class NetCdfTimedWriter(fm.TimeComponent):
         :hide:
 
         writer.initialize()
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    inputs : dict of str, Layer
+        Dictionary of inputs. Keys are output names, values are Layer object.
+    time_var : str
+        Name of the time coordinate.
+    start : datetime.datetime
+        Starting time
+    step : datetime.timedelta
+        Time step
     """
 
     def __init__(
@@ -48,15 +62,6 @@ class NetCdfTimedWriter(fm.TimeComponent):
         start: datetime,
         step: timedelta,
     ):
-        """
-        Constructs a NetCDF writer for regular/predefined time steps.
-
-        :param path: path to the output NetCDF file
-        :param inputs: dictionary of inputs. Keys are input names, values are Layer object
-        :param time_var: name of the time coordinate/variable in the output dataset
-        :param start: starting time (of type datetime)
-        :param step: time step (of type timedelta)
-        """
         super().__init__()
 
         if start is not None and not isinstance(start, datetime):
@@ -143,6 +148,16 @@ class NetCdfPushWriter(fm.Component):
         writer.initialize()
 
     Note that all data sources must have the same time step!
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    inputs : dict of str, Layer
+        Dictionary of inputs. Keys are output names, values are Layer object.
+    time_var : str
+        Name of the time coordinate.
     """
 
     def __init__(
@@ -151,13 +166,6 @@ class NetCdfPushWriter(fm.Component):
         inputs: dict[str, Layer],
         time_var: str,
     ):
-        """
-        Constructs a NetCDF writer for push-based writing.
-
-        :param path: path to the output NetCDF file
-        :param inputs: dictionary of inputs. Keys are input names, values are Layer object
-        :param time_var: name of the time coordinate/variable in the output dataset
-        """
         super().__init__()
 
         self._path = path

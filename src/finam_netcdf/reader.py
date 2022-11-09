@@ -29,16 +29,17 @@ class NetCdfStaticReader(fm.Component):
         :hide:
 
         reader.initialize()
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    outputs : dict of str, Layer
+        Dictionary of outputs. Keys are output names, values are Layer object
     """
 
     def __init__(self, path: str, outputs: dict[str, Layer]):
-        """
-        Constructs a NetCDF reader for reading a single data grid.
-
-        :param path: path to NetCDF file
-        :param outputs: dictionary of outputs. Keys are output names, values are Layer object
-        :param time: starting time stamp. Optional. Default '1900-01-01'.
-        """
         super().__init__()
         self.path = path
         self.output_vars = outputs
@@ -105,6 +106,21 @@ class NetCdfReader(fm.TimeComponent):
         :hide:
 
         reader.initialize()
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    outputs : dict of str, Layer
+        Dictionary of outputs. Keys are output names, values are Layer object.
+    time_var : str
+        Name of the time coordinate.
+    time_limits : tuple (datetime.datetime, datetime.datetime), optional
+        Tuple of start and end datetime (both inclusive)
+    time_callback : callable, optional
+        An optional callback for time stepping and indexing:
+        (step, last_time, last_index) -> (time, index)
     """
 
     def __init__(
@@ -115,16 +131,6 @@ class NetCdfReader(fm.TimeComponent):
         time_limits=None,
         time_callback=None,
     ):
-        """
-        Constructs a NetCDF reader for reading time series of data grid.
-
-        :param path: path to NetCDF file
-        :param outputs: dictionary of outputs. Keys are output names, values are Layer object
-        :param time_var: time coordinate variable of the dataset
-        :param time_limits: tuple of start and end datetime (both inclusive)
-        :param time_callback: an optional callback for time stepping and indexing:
-                              (step, last_time, last_index) -> (time, index)
-        """
         super().__init__()
 
         self.path = path
