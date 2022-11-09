@@ -34,11 +34,21 @@ class TestReader(unittest.TestCase):
     def test_time_reader(self):
         path = "tests/data/lai.nc"
         reader = NetCdfReader(
-            path, {"LAI": Layer(var="lai", xyz=("lon", "lat"))}, time_var="time"
+            path,
+            {
+                "LAI": Layer(var="lai", xyz=("lon", "lat")),
+                "LAI-stat": Layer(
+                    var="lai", xyz=("lon", "lat"), fixed={"time": 0}, static=True
+                ),
+            },
+            time_var="time",
         )
 
         consumer = fm.modules.DebugConsumer(
-            {"Input": fm.Info(time=None, grid=None, units=None)},
+            {
+                "Input": fm.Info(time=None, grid=None, units=None),
+                "Input-stat": fm.Info(time=None, grid=None, units=None),
+            },
             start=datetime(1901, 1, 1, 0, 1, 0),
             step=timedelta(minutes=1),
         )
@@ -47,8 +57,29 @@ class TestReader(unittest.TestCase):
         comp.initialize()
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
+        reader.outputs["LAI-stat"] >> consumer.inputs["Input-stat"]
+
+        comp.connect()
+
+        self.assertEqual(
+            fm.data.get_magnitude(consumer.data["Input"][0, 0, 0]),
+            fm.data.get_magnitude(consumer.data["Input-stat"][0, 0, 0]),
+        )
+
+        self.assertEqual(
+            consumer.data["Input"]["time"][0], consumer.data["Input-stat"]["time"][0]
+        )
 
         comp.run(datetime(1901, 1, 1, 0, 12))
+
+        self.assertNotEqual(
+            fm.data.get_magnitude(consumer.data["Input"][0, 0, 0]),
+            fm.data.get_magnitude(consumer.data["Input-stat"][0, 0, 0]),
+        )
+
+        self.assertNotEqual(
+            consumer.data["Input"]["time"][0], consumer.data["Input-stat"]["time"][0]
+        )
 
     def test_time_reader_limits(self):
         path = "tests/data/lai.nc"

@@ -135,8 +135,8 @@ class NetCdfReader(fm.TimeComponent):
         return None
 
     def _initialize(self):
-        for o in self.output_vars.keys():
-            self.outputs.add(name=o)
+        for o, layer in self.output_vars.items():
+            self.outputs.add(name=o, static=layer.static)
         self.create_connector()
 
     def _connect(self):
@@ -174,10 +174,16 @@ class NetCdfReader(fm.TimeComponent):
                 self._time, self.time_index = self.time_callback(self.step, None, None)
 
             for name, pars in self.output_vars.items():
+                time_var = (
+                    {}
+                    if pars.static
+                    else {self.time_var: self.time_indices[self.time_index]}
+                )
+
                 info, grid = extract_grid(
                     self.dataset,
                     pars,
-                    {self.time_var: self.time_indices[self.time_index]},
+                    time_var,
                 )
                 grid.name = name
                 if self.time_callback is not None:
@@ -210,6 +216,9 @@ class NetCdfReader(fm.TimeComponent):
                 self.step, self._time, self.time_index
             )
         for name, pars in self.output_vars.items():
+            if pars.static:
+                continue
+
             _info, grid = extract_grid(
                 self.dataset, pars, {self.time_var: self.time_indices[self.time_index]}
             )

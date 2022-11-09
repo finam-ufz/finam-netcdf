@@ -9,15 +9,22 @@ class Layer:
     """
     Defines a NetCDF layer (2D data array).
 
-    :param var: layer variable
-    :param xyz: coordinate variables in xyz order
-    :param fixed: dictionary for further, fixed index coordinate variables (e.g. 'time')
+    Parameters
+    ----------
+
+    var : str
+        Layer variable
+    xyz : tuple of str
+        Coordinate variables in xyz order
+    fixed : dict of str, int
+        Dictionary for further, fixed index coordinate variables (e.g. 'time')
     """
 
-    def __init__(self, var: str, xyz=("x", "y"), fixed=None):
+    def __init__(self, var: str, xyz=("x", "y"), fixed=None, static=False):
         self.var = var
         self.xyz = xyz
         self.fixed = fixed or {}
+        self.static = static
 
 
 def extract_grid(dataset, layer, fixed=None):
