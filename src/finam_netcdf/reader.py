@@ -11,7 +11,7 @@ from .tools import Layer, extract_grid
 
 class NetCdfStaticReader(fm.Component):
     """
-    NetCDF reader component that reads a single 2D data array at startup.
+    NetCDF reader component that reads a single 2D data array per output at startup.
 
     Usage:
 
