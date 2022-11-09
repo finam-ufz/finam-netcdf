@@ -8,7 +8,7 @@ import pandas as pd
 
 class Layer:
     """
-    Defines a NetCDF layer (2D data array).
+    Defines a NetCDF layer.
 
     Parameters
     ----------

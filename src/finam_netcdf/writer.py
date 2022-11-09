@@ -17,7 +17,10 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     Usage:
 
-    .. code-block:: python
+    .. testcode:: constructor
+
+       from datetime import datetime, timedelta
+       from finam_netcdf import Layer, NetCdfTimedWriter
 
        file = "path/to/file.nc"
        writer = NetCdfTimedWriter(
@@ -30,6 +33,25 @@ class NetCdfTimedWriter(fm.TimeComponent):
             start=datetime(2000, 1, 1),
             step=timedelta(days=1),
        )
+
+    .. testcode:: constructor
+        :hide:
+
+        writer.initialize()
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    inputs : dict of str, Layer
+        Dictionary of inputs. Keys are output names, values are Layer object.
+    time_var : str
+        Name of the time coordinate.
+    start : datetime.datetime
+        Starting time
+    step : datetime.timedelta
+        Time step
     """
 
     def __init__(
@@ -40,15 +62,6 @@ class NetCdfTimedWriter(fm.TimeComponent):
         start: datetime,
         step: timedelta,
     ):
-        """
-        Constructs a NetCDF writer for regular/predefined time steps.
-
-        :param path: path to the output NetCDF file
-        :param inputs: dictionary of inputs. Keys are input names, values are Layer object
-        :param time_var: name of the time coordinate/variable in the output dataset
-        :param start: starting time (of type datetime)
-        :param step: time step (of type timedelta)
-        """
         super().__init__()
 
         if start is not None and not isinstance(start, datetime):
@@ -115,19 +128,36 @@ class NetCdfPushWriter(fm.Component):
 
     Usage:
 
-    .. code-block:: python
+    .. testcode:: constructor
+
+       from finam_netcdf import Layer, NetCdfPushWriter
 
        file = "path/to/file.nc"
        writer = NetCdfPushWriter(
             path=file,
             inputs={
-                "LAI": Layer(var="lai", x="lon", y="lat"),
-                "SM": Layer(var="soil_moisture", x="lon", y="lat"),
+                "LAI": Layer(var="lai", xyz=("lon", "lat")),
+                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
             },
             time_var="time"
        )
 
+    .. testcode:: constructor
+        :hide:
+
+        writer.initialize()
+
     Note that all data sources must have the same time step!
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    inputs : dict of str, Layer
+        Dictionary of inputs. Keys are output names, values are Layer object.
+    time_var : str
+        Name of the time coordinate.
     """
 
     def __init__(
@@ -136,13 +166,6 @@ class NetCdfPushWriter(fm.Component):
         inputs: dict[str, Layer],
         time_var: str,
     ):
-        """
-        Constructs a NetCDF writer for push-based writing.
-
-        :param path: path to the output NetCDF file
-        :param inputs: dictionary of inputs. Keys are input names, values are Layer object
-        :param time_var: name of the time coordinate/variable in the output dataset
-        """
         super().__init__()
 
         self._path = path
