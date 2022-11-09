@@ -19,6 +19,8 @@ class Layer:
         Coordinate variables in xyz order
     fixed : dict of str, int
         Dictionary for further, fixed index coordinate variables (e.g. 'time')
+    static : bool, optional
+        Marks this layer/outputs as static. Defaults to ``False``.
     """
 
     def __init__(self, var: str, xyz=("x", "y"), fixed=None, static=False):
