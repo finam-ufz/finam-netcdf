@@ -25,8 +25,7 @@ def extract_grid(dataset, layer, fixed=None):
     variable = dataset[layer.var].load()
     xyz = [variable.coords[ax] for ax in layer.xyz]
 
-    fx = layer.fixed if fixed is None else dict(layer.fixed, **fixed)
-    xdata = variable.isel(fx)
+    xdata = variable.isel(layer.fixed if fixed is None else dict(layer.fixed, **fixed))
 
     if len(xdata.dims) > 3:
         raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
