@@ -3,6 +3,7 @@ import copy
 
 import finam as fm
 import numpy as np
+import pandas as pd
 
 
 class Layer:
@@ -83,9 +84,11 @@ def extract_grid(dataset, layer, fixed=None):
 
     # re-insert the time dimension
     time = None
-    if fm.data.has_time(xdata):
+    if not layer.static and fm.data.has_time(xdata):
         xdata = xdata.expand_dims(dim="time", axis=0)
         time = fm.data.get_time(xdata)[0]
+    else:
+        xdata = xdata.expand_dims(dim="time", axis=0).assign_coords(time=[pd.NaT])
 
     meta = copy.copy(xdata.attrs)
     info = fm.Info(time=time, grid=grid, meta=meta)

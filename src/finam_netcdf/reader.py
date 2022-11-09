@@ -34,9 +34,12 @@ class NetCdfStaticReader(fm.Component):
         super().__init__()
         self.path = path
         self.output_vars = outputs
+
+        for layer in self.output_vars.values():
+            layer.static = True
+
         self.dataset = None
         self.data = None
-        self._time = None
         self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
@@ -52,13 +55,6 @@ class NetCdfStaticReader(fm.Component):
                 info, grid = extract_grid(self.dataset, pars, pars.fixed)
                 grid.name = name
                 self.data[name] = (info, grid)
-                if self._time is None:
-                    self._time = info.time
-                else:
-                    if self._time != info.time:
-                        raise ValueError(
-                            "Can't work with NetCDF variables with different timestamps"
-                        )
 
         self.try_connect(
             push_infos={name: value[0] for name, value in self.data.items()},
@@ -186,12 +182,12 @@ class NetCdfReader(fm.TimeComponent):
                     time_var,
                 )
                 grid.name = name
+                info.time = self._time
                 if self.time_callback is not None:
                     grid = fm.data.get_data(grid)
                 self.data[name] = (info, grid)
 
         self.try_connect(
-            time=self._time,
             push_infos={name: value[0] for name, value in self.data.items()},
             push_data={name: value[1] for name, value in self.data.items()},
         )

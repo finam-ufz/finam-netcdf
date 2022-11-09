@@ -23,11 +23,26 @@ class TestReader(unittest.TestCase):
         comp = fm.Composition([reader, consumer], log_level="DEBUG")
         comp.initialize()
 
-        (
-            reader.outputs["LAI"]
-            >> fm.adapters.ExtrapolateTime()
-            >> consumer.inputs["Input"]
+        (reader.outputs["LAI"] >> consumer.inputs["Input"])
+
+        comp.run(datetime(1901, 1, 2))
+
+    def test_init_reader_no_time(self):
+        path = "tests/data/temp.nc"
+        reader = NetCdfStaticReader(
+            path,
+            {"Lat": Layer(var="lat", xyz=("xc", "yc"))},
         )
+        consumer = fm.modules.DebugConsumer(
+            {"Input": fm.Info(time=None, grid=None, units=None)},
+            start=datetime(1901, 1, 1, 1, 0, 0),
+            step=timedelta(days=1),
+        )
+
+        comp = fm.Composition([reader, consumer], log_level="DEBUG")
+        comp.initialize()
+
+        (reader.outputs["Lat"] >> consumer.inputs["Input"])
 
         comp.run(datetime(1901, 1, 2))
 
@@ -53,7 +68,7 @@ class TestReader(unittest.TestCase):
             step=timedelta(minutes=1),
         )
 
-        comp = fm.Composition([reader, consumer], log_level="DEBUG")
+        comp = fm.Composition([reader, consumer])
         comp.initialize()
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
@@ -67,7 +82,11 @@ class TestReader(unittest.TestCase):
         )
 
         self.assertEqual(
-            consumer.data["Input"]["time"][0], consumer.data["Input-stat"]["time"][0]
+            fm.data.get_time(consumer.data["Input"])[0], datetime(1901, 1, 1, 0, 1, 0)
+        )
+        self.assertEqual(
+            fm.data.get_time(consumer.data["Input-stat"])[0],
+            datetime(1901, 1, 1, 0, 1, 0),
         )
 
         comp.run(datetime(1901, 1, 1, 0, 12))
@@ -77,9 +96,40 @@ class TestReader(unittest.TestCase):
             fm.data.get_magnitude(consumer.data["Input-stat"][0, 0, 0]),
         )
 
-        self.assertNotEqual(
-            consumer.data["Input"]["time"][0], consumer.data["Input-stat"]["time"][0]
+        self.assertEqual(
+            fm.data.get_time(consumer.data["Input"])[0], datetime(1901, 1, 1, 0, 12, 0)
         )
+        self.assertEqual(
+            fm.data.get_time(consumer.data["Input-stat"])[0],
+            datetime(1901, 1, 1, 0, 12, 0),
+        )
+
+    def test_time_reader_no_time(self):
+        path = "tests/data/temp.nc"
+        reader = NetCdfReader(
+            path,
+            {
+                "Tmin": Layer(var="tmin", xyz=("xc", "yc")),
+                "Lat": Layer(var="lat", xyz=("xc", "yc"), static=True),
+            },
+            time_var="time",
+        )
+
+        consumer = fm.modules.DebugConsumer(
+            {
+                "Input": fm.Info(time=None, grid=None, units=None),
+            },
+            start=datetime(1901, 1, 1, 0, 1, 0),
+            step=timedelta(minutes=1),
+        )
+
+        comp = fm.Composition([reader, consumer])
+        comp.initialize()
+
+        reader.outputs["Lat"] >> consumer.inputs["Input"]
+
+        comp.connect()
+        comp.run(datetime(1901, 1, 1, 0, 12))
 
     def test_time_reader_limits(self):
         path = "tests/data/lai.nc"
