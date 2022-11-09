@@ -3,21 +3,31 @@ import copy
 
 import finam as fm
 import numpy as np
+import pandas as pd
 
 
 class Layer:
     """
     Defines a NetCDF layer (2D data array).
 
-    :param var: layer variable
-    :param xyz: coordinate variables in xyz order
-    :param fixed: dictionary for further, fixed index coordinate variables (e.g. 'time')
+    Parameters
+    ----------
+
+    var : str
+        Layer variable
+    xyz : tuple of str
+        Coordinate variables in xyz order
+    fixed : dict of str, int
+        Dictionary for further, fixed index coordinate variables (e.g. 'time')
+    static : bool, optional
+        Marks this layer/outputs as static. Defaults to ``False``.
     """
 
-    def __init__(self, var: str, xyz=("x", "y"), fixed=None):
+    def __init__(self, var: str, xyz=("x", "y"), fixed=None, static=False):
         self.var = var
         self.xyz = xyz
         self.fixed = fixed or {}
+        self.static = static
 
 
 def extract_grid(dataset, layer, fixed=None):
@@ -76,9 +86,11 @@ def extract_grid(dataset, layer, fixed=None):
 
     # re-insert the time dimension
     time = None
-    if fm.data.has_time(xdata):
+    if not layer.static and fm.data.has_time(xdata):
         xdata = xdata.expand_dims(dim="time", axis=0)
         time = fm.data.get_time(xdata)[0]
+    else:
+        xdata = xdata.expand_dims(dim="time", axis=0).assign_coords(time=[pd.NaT])
 
     meta = copy.copy(xdata.attrs)
     info = fm.Info(time=time, grid=grid, meta=meta)
