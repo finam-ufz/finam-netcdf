@@ -1,6 +1,8 @@
 """
 NetCDF writer components.
 """
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from functools import partial
 
