@@ -15,12 +15,20 @@ class NetCdfStaticReader(fm.Component):
 
     Usage:
 
-    .. code-block:: python
+    .. testcode:: constructor
+
+       from finam_netcdf import Layer, NetCdfStaticReader
 
        path = "tests/data/lai.nc"
-       reader = NetCdfInitReader(
-           path, {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})}
+       reader = NetCdfStaticReader(
+           path,
+           {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
        )
+
+    .. testcode:: constructor
+        :hide:
+
+        reader.initialize()
     """
 
     def __init__(self, path: str, outputs: dict[str, Layer]):
@@ -82,12 +90,21 @@ class NetCdfReader(fm.TimeComponent):
 
     Usage:
 
-    .. code-block:: python
+    .. testcode:: constructor
+
+       from finam_netcdf import Layer, NetCdfReader
 
        path = "tests/data/lai.nc"
-       reader = NetCdfTimeReader(
-           path, {"LAI": Layer(var="lai", x="lon", y="lat")}, time_var="time"
+       reader = NetCdfReader(
+           path,
+           {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
+           time_var="time"
        )
+
+    .. testcode:: constructor
+        :hide:
+
+        reader.initialize()
     """
 
     def __init__(

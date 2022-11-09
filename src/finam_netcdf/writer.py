@@ -17,7 +17,10 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     Usage:
 
-    .. code-block:: python
+    .. testcode:: constructor
+
+       from datetime import datetime, timedelta
+       from finam_netcdf import Layer, NetCdfTimedWriter
 
        file = "path/to/file.nc"
        writer = NetCdfTimedWriter(
@@ -30,6 +33,11 @@ class NetCdfTimedWriter(fm.TimeComponent):
             start=datetime(2000, 1, 1),
             step=timedelta(days=1),
        )
+
+    .. testcode:: constructor
+        :hide:
+
+        writer.initialize()
     """
 
     def __init__(
@@ -115,17 +123,24 @@ class NetCdfPushWriter(fm.Component):
 
     Usage:
 
-    .. code-block:: python
+    .. testcode:: constructor
+
+       from finam_netcdf import Layer, NetCdfPushWriter
 
        file = "path/to/file.nc"
        writer = NetCdfPushWriter(
             path=file,
             inputs={
-                "LAI": Layer(var="lai", x="lon", y="lat"),
-                "SM": Layer(var="soil_moisture", x="lon", y="lat"),
+                "LAI": Layer(var="lai", xyz=("lon", "lat")),
+                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
             },
             time_var="time"
        )
+
+    .. testcode:: constructor
+        :hide:
+
+        writer.initialize()
 
     Note that all data sources must have the same time step!
     """
