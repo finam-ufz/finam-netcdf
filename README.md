@@ -17,12 +17,12 @@ See also the [examples](examples) for complete coupling scripts using the compon
 
 The package provides two types of NetCDF reader components:
 
-* `NetCdfInitReader` for reading starting conditions during initialization
-* `NetCdfTimeReader` for reading time series of rasters
+* `NetCdfStaticReader` for reading starting conditions during initialization
+* `NetCdfReader` for reading time series of rasters
 
 Both components can read multiple variables from a single dataset.
 
-#### `NetCdfInitReader`
+#### `NetCdfStaticReader`
 
 Reads once during initialization of the coupling setup.
 All coordinate dimensions except those in `xyz` must be fixed at a certain index.
@@ -39,7 +39,7 @@ reader = NetCdfStaticReader(
 )
 ```
 
-#### `NetCdfTimeReader`
+#### `NetCdfReader`
 
 Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also [Time manipulation](#time-manipulation)).
 All coordinate dimensions except those in `xyz` and `time` must be fixed at a certain index.
