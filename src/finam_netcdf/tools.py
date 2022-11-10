@@ -89,7 +89,7 @@ def extract_grid(dataset, layer, fixed=None):
     if not layer.static and fm.data.has_time(xdata):
         time = fm.data.get_time(xdata)[0]
 
-    xdata = xdata.drop(xdata.coords)
+    xdata = xdata.drop_vars(xdata.coords)
     xdata = xdata.expand_dims(dim="time", axis=0).assign_coords(time=[time or pd.NaT])
 
     meta = copy.copy(xdata.attrs)
