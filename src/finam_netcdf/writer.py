@@ -8,6 +8,12 @@ from functools import partial
 
 import finam as fm
 import numpy as np
+
+# pylint: disable-next=W0611
+import pint
+
+# pylint: disable-next=W0611
+import pint_xarray
 import xarray as xr
 
 from .tools import Layer
@@ -102,7 +108,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         self.data_arrays = {}
         for name, layer in self._input_dict.items():
-            data = self.connector.in_data[name]
+            data = self.connector.in_data[name].pint.dequantify()
             data.attrs.update(self.inputs[name].info.meta)
             self.data_arrays[layer.var] = data.assign_coords(coords)
 
@@ -114,7 +120,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         for name, inp in self.inputs.items():
             layer = self._input_dict[name]
-            new_var = inp.pull_data(self.time)
+            new_var = inp.pull_data(self.time).pint.dequantify()
 
             var = self.data_arrays[layer.var]
 
@@ -206,7 +212,7 @@ class NetCdfPushWriter(fm.Component):
 
         self.data_arrays = {}
         for name, layer in self._input_dict.items():
-            data = self.connector.in_data[name]
+            data = self.connector.in_data[name].pint.dequantify()
             data.attrs.update(self.inputs[name].info.meta)
             self.data_arrays[layer.var] = data.assign_coords(coords)
 
@@ -244,7 +250,7 @@ class NetCdfPushWriter(fm.Component):
         self.last_update = time
 
         layer = self._input_dict[name]
-        new_var = caller.pull_data(self.last_update)
+        new_var = caller.pull_data(self.last_update).pint.dequantify()
 
         var = self.data_arrays[layer.var]
         self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
