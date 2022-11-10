@@ -129,6 +129,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
     def _finalize(self):
         dataset = xr.Dataset(data_vars=self.data_arrays)
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
+        dataset.close()
 
 
 class NetCdfPushWriter(fm.Component):

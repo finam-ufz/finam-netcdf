@@ -52,14 +52,16 @@ class TestChain(unittest.TestCase):
             reader["LAI"] >> writer["LAI"]
             reader["LAI"] >> consumer["LAI"]
 
-            comp.run(datetime(1901, 1, 1, 0, 12))
+            comp.run(datetime(1990, 1, 31))
+
+            self.assertTrue(path.isfile(out_path))
 
             # Second iteration
 
             reader = NetCdfReader(
-                in_path,
+                out_path,
                 {
-                    "LAI": Layer(var="tmin", xyz=("xc", "yc")),
+                    "LAI": Layer(var="lai", xyz=("xc", "yc")),
                 },
                 time_var="time",
             )
@@ -75,7 +77,7 @@ class TestChain(unittest.TestCase):
 
             reader["LAI"] >> consumer["LAI"]
 
-            comp.run(datetime(1901, 1, 1, 0, 12))
+            comp.run(datetime(1990, 1, 31))
 
             self.assertEqual(len(data_1), len(data_2))
 
