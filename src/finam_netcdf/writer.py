@@ -100,10 +100,11 @@ class NetCdfTimedWriter(fm.TimeComponent):
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
-        self.data_arrays = {
-            layer.var: self.connector.in_data[name].assign_coords(coords)
-            for name, layer in self._input_dict.items()
-        }
+        self.data_arrays = {}
+        for name, layer in self._input_dict.items():
+            data = self.connector.in_data[name]
+            data.attrs.update(self.inputs[name].info.meta)
+            self.data_arrays[layer.var] = data.assign_coords(coords)
 
     def _validate(self):
         pass
@@ -203,10 +204,11 @@ class NetCdfPushWriter(fm.Component):
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
-        self.data_arrays = {
-            layer.var: self.connector.in_data[name].assign_coords(coords)
-            for name, layer in self._input_dict.items()
-        }
+        self.data_arrays = {}
+        for name, layer in self._input_dict.items():
+            data = self.connector.in_data[name]
+            data.attrs.update(self.inputs[name].info.meta)
+            self.data_arrays[layer.var] = data.assign_coords(coords)
 
     def _validate(self):
         pass

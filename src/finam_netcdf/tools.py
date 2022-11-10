@@ -82,6 +82,7 @@ def extract_grid(dataset, layer, fixed=None):
             point_axes, axes_names=layer.xyz, data_location=fm.Location.CELLS
         )
 
+    meta = copy.copy(xdata.attrs)
     xdata = fm.data.quantify(xdata)
 
     # re-insert the time dimension
@@ -92,7 +93,6 @@ def extract_grid(dataset, layer, fixed=None):
     xdata = xdata.drop_vars(xdata.coords)
     xdata = xdata.expand_dims(dim="time", axis=0).assign_coords(time=[time or pd.NaT])
 
-    meta = copy.copy(xdata.attrs)
     info = fm.Info(time=time, grid=grid, meta=meta)
 
     return info, xdata
