@@ -8,6 +8,12 @@ from functools import partial
 
 import finam as fm
 import numpy as np
+
+# pylint: disable-next=W0611
+import pint
+
+# pylint: disable-next=W0611
+import pint_xarray
 import xarray as xr
 
 from .tools import Layer
@@ -100,10 +106,11 @@ class NetCdfTimedWriter(fm.TimeComponent):
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
-        self.data_arrays = {
-            layer.var: self.connector.in_data[name].assign_coords(coords)
-            for name, layer in self._input_dict.items()
-        }
+        self.data_arrays = {}
+        for name, layer in self._input_dict.items():
+            data = self.connector.in_data[name].pint.dequantify()
+            data.attrs.update(self.inputs[name].info.meta)
+            self.data_arrays[layer.var] = data.assign_coords(coords)
 
     def _validate(self):
         pass
@@ -113,7 +120,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         for name, inp in self.inputs.items():
             layer = self._input_dict[name]
-            new_var = inp.pull_data(self.time)
+            new_var = inp.pull_data(self.time).pint.dequantify()
 
             var = self.data_arrays[layer.var]
 
@@ -122,6 +129,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
     def _finalize(self):
         dataset = xr.Dataset(data_vars=self.data_arrays)
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
+        dataset.close()
 
 
 class NetCdfPushWriter(fm.Component):
@@ -203,10 +211,11 @@ class NetCdfPushWriter(fm.Component):
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
-        self.data_arrays = {
-            layer.var: self.connector.in_data[name].assign_coords(coords)
-            for name, layer in self._input_dict.items()
-        }
+        self.data_arrays = {}
+        for name, layer in self._input_dict.items():
+            data = self.connector.in_data[name].pint.dequantify()
+            data.attrs.update(self.inputs[name].info.meta)
+            self.data_arrays[layer.var] = data.assign_coords(coords)
 
     def _validate(self):
         pass
@@ -242,7 +251,7 @@ class NetCdfPushWriter(fm.Component):
         self.last_update = time
 
         layer = self._input_dict[name]
-        new_var = caller.pull_data(self.last_update)
+        new_var = caller.pull_data(self.last_update).pint.dequantify()
 
         var = self.data_arrays[layer.var]
         self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
