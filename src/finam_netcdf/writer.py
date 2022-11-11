@@ -128,6 +128,10 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     def _finalize(self):
         dataset = xr.Dataset(data_vars=self.data_arrays)
+
+        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
+        dataset = dataset.transpose(self.time_var, *dims)
+
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
 
@@ -225,6 +229,10 @@ class NetCdfPushWriter(fm.Component):
 
     def _finalize(self):
         dataset = xr.Dataset(data_vars=self.data_arrays)
+
+        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
+        dataset = dataset.transpose(self.time_var, *dims)
+
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
 
