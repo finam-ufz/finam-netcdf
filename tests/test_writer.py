@@ -64,7 +64,7 @@ class TestWriter(unittest.TestCase):
             dataset = xr.open_dataset(file)
             lai = dataset["lai"]
 
-            self.assertEqual(lai.dims, ("time", "x", "y"))
+            self.assertEqual(lai.dims, ("time", "y", "x"))
             self.assertEqual(lai.coords["time"].shape, (31,))
             self.assertEqual(lai.coords["x"].shape, (10,))
             self.assertEqual(lai.coords["y"].shape, (5,))
@@ -113,7 +113,7 @@ class TestWriter(unittest.TestCase):
             dataset = xr.open_dataset(file)
             lai = dataset["lai"]
 
-            self.assertEqual(lai.dims, ("time", "x", "y"))
+            self.assertEqual(lai.dims, ("time", "y", "x"))
             self.assertEqual(lai.coords["time"].shape, (31,))
             self.assertEqual(lai.coords["x"].shape, (10,))
             self.assertEqual(lai.coords["y"].shape, (5,))
