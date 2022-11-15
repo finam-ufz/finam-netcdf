@@ -53,7 +53,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
     path : str
         Path to the NetCDF file to read.
     inputs : dict of str, Layer
-        Dictionary of inputs. Keys are output names, values are Layer object.
+        Dictionary of inputs. Keys are output names, values are :class:`.Layer` objects.
     time_var : str
         Name of the time coordinate.
     start : datetime.datetime
@@ -169,7 +169,7 @@ class NetCdfPushWriter(fm.Component):
     path : str
         Path to the NetCDF file to read.
     inputs : dict of str, Layer
-        Dictionary of inputs. Keys are output names, values are Layer object.
+        Dictionary of inputs. Keys are output names, values are :class:`.Layer` objects.
     time_var : str
         Name of the time coordinate.
     """

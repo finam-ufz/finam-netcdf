@@ -38,7 +38,7 @@ class NetCdfStaticReader(fm.Component):
     path : str
         Path to the NetCDF file to read.
     outputs : dict of str, Layer
-        Dictionary of outputs. Keys are output names, values are Layer object
+        Dictionary of outputs. Keys are output names, values are :class:`.Layer` objects.
     """
 
     def __init__(self, path: str, outputs: dict[str, Layer]):
@@ -115,7 +115,7 @@ class NetCdfReader(fm.TimeComponent):
     path : str
         Path to the NetCDF file to read.
     outputs : dict of str, Layer
-        Dictionary of outputs. Keys are output names, values are Layer object.
+        Dictionary of outputs. Keys are output names, values are :class:`.Layer` objects.
     time_var : str
         Name of the time coordinate.
     time_limits : tuple (datetime.datetime, datetime.datetime), optional
