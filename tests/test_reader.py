@@ -104,6 +104,26 @@ class TestReader(unittest.TestCase):
             datetime(1901, 1, 1, 0, 12, 0),
         )
 
+    def test_time_reader_auto(self):
+        path = "tests/data/lai.nc"
+        reader = NetCdfReader(path)
+
+        consumer = fm.modules.DebugConsumer(
+            {
+                "Input": fm.Info(time=None, grid=None, units=None),
+            },
+            start=datetime(1901, 1, 1, 0, 1, 0),
+            step=timedelta(minutes=1),
+        )
+
+        comp = fm.Composition([reader, consumer])
+        comp.initialize()
+
+        reader.outputs["lai"] >> consumer.inputs["Input"]
+
+        comp.connect()
+        comp.run(datetime(1901, 1, 1, 0, 12))
+
     def test_time_reader_no_time(self):
         path = "tests/data/temp.nc"
         reader = NetCdfReader(
