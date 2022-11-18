@@ -4,7 +4,7 @@ import xarray as xr
 from finam import Composition, Info, Location, UniformGrid
 from numpy.testing import assert_allclose
 
-from finam_netcdf.tools import Layer, create_point_axis, extract_grid
+from finam_netcdf.tools import Layer, create_point_axis, extract_grid, extract_layers
 
 
 class TestTools(unittest.TestCase):
@@ -34,3 +34,16 @@ class TestTools(unittest.TestCase):
         cell_ax = [1, 3, 4]
         point_ax = create_point_axis(cell_ax)
         assert_allclose(point_ax, [0.0, 2.0, 3.5, 4.5])
+
+    def test_extraxt_layers(self):
+        path = "tests/data/temp.nc"
+        dataset = xr.open_dataset(path)
+        time_var, layers = extract_layers(dataset)
+
+        self.assertEqual(time_var, "time")
+
+        self.assertEqual(layers[0].var, "tmax")
+        self.assertEqual(layers[0].xyz, ("xc", "yc"))
+
+        self.assertEqual(layers[1].var, "tmin")
+        self.assertEqual(layers[1].xyz, ("xc", "yc"))

@@ -8,7 +8,7 @@ from datetime import datetime
 import finam as fm
 import xarray as xr
 
-from .tools import Layer, extract_grid
+from .tools import Layer, extract_grid, extract_layers
 
 
 class NetCdfStaticReader(fm.Component):
@@ -22,6 +22,11 @@ class NetCdfStaticReader(fm.Component):
        from finam_netcdf import Layer, NetCdfStaticReader
 
        path = "tests/data/lai.nc"
+
+       # automatically determine data variables
+       reader = NetCdfStaticReader(path)
+
+       # explicit data variables
        reader = NetCdfStaticReader(
            path,
            {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
@@ -39,28 +44,42 @@ class NetCdfStaticReader(fm.Component):
         Path to the NetCDF file to read.
     outputs : dict of str, Layer
         Dictionary of outputs. Keys are output names, values are :class:`.Layer` objects.
+        If not given, the reader tries to determine all variables from the dataset.
     """
 
-    def __init__(self, path: str, outputs: dict[str, Layer]):
+    def __init__(self, path: str, outputs: dict[str, Layer] = None):
         super().__init__()
         self.path = path
         self.output_vars = outputs
-
-        for layer in self.output_vars.values():
-            layer.static = True
 
         self.dataset = None
         self.data = None
         self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
+        self.dataset = xr.open_dataset(self.path)
+
+        if self.output_vars is None:
+            _time_var, layers = extract_layers(self.dataset)
+            self.output_vars = {}
+            for l in layers:
+                if l.static:
+                    self.output_vars[l.var] = l
+                else:
+                    self.logger.warning(
+                        "Skipping variable %s, as it is not static.", l.var
+                    )
+        else:
+            for layer in self.output_vars.values():
+                layer.static = True
+
         for o in self.output_vars.keys():
             self.outputs.add(name=o, static=True)
+
         self.create_connector()
 
     def _connect(self):
-        if self.dataset is None:
-            self.dataset = xr.open_dataset(self.path)
+        if self.data is None:
             self.data = {}
             for name, pars in self.output_vars.items():
                 info, grid = extract_grid(self.dataset, pars, pars.fixed)
@@ -98,6 +117,11 @@ class NetCdfReader(fm.TimeComponent):
        from finam_netcdf import Layer, NetCdfReader
 
        path = "tests/data/lai.nc"
+
+       # automatically determine data variables
+       reader = NetCdfReader(path)
+
+       # explicit data variables
        reader = NetCdfReader(
            path,
            {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
@@ -114,9 +138,10 @@ class NetCdfReader(fm.TimeComponent):
 
     path : str
         Path to the NetCDF file to read.
-    outputs : dict of str, Layer
+    outputs : dict of (str, Layer), optional
         Dictionary of outputs. Keys are output names, values are :class:`.Layer` objects.
-    time_var : str
+        If not given, the reader tries to determine all variables from the dataset.
+    time_var : str, optional
         Name of the time coordinate.
     time_limits : tuple (datetime.datetime, datetime.datetime), optional
         Tuple of start and end datetime (both inclusive)
@@ -128,8 +153,8 @@ class NetCdfReader(fm.TimeComponent):
     def __init__(
         self,
         path: str,
-        outputs: dict[str, Layer],
-        time_var: str,
+        outputs: dict[str, Layer] = None,
+        time_var: str = None,
         time_limits=None,
         time_callback=None,
     ):
@@ -138,6 +163,12 @@ class NetCdfReader(fm.TimeComponent):
         self.path = path
         self.output_vars = outputs
         self.time_var = time_var
+
+        if (self.output_vars is None) != (self.time_var is None):
+            raise ValueError(
+                "Only none or both of `outputs` and `time_var` must be None"
+            )
+
         self.time_callback = time_callback
         self.time_limits = time_limits
         self.dataset = None
@@ -156,13 +187,18 @@ class NetCdfReader(fm.TimeComponent):
         return None
 
     def _initialize(self):
+        self.dataset = xr.open_dataset(self.path)
+
+        if self.output_vars is None:
+            self.time_var, layers = extract_layers(self.dataset)
+            self.output_vars = {l.var: l for l in layers}
+
         for o, layer in self.output_vars.items():
             self.outputs.add(name=o, static=layer.static)
         self.create_connector()
 
     def _connect(self):
-        if self.dataset is None:
-            self.dataset = xr.open_dataset(self.path)
+        if self.data is None:
             self.data = {}
             times = self.dataset.coords[self.time_var].dt
 

@@ -29,6 +29,46 @@ class Layer:
         self.fixed = fixed or {}
         self.static = static
 
+    def __repr__(self):
+        return f"Layer(var={self.var}, xyz={self.xyz}, fixed={self.fixed}, static={self.static})"
+
+
+def extract_layers(dataset):
+    """Extracts layer information from a dataset"""
+    layers = []
+    time_var = None
+
+    for var, data in dataset.data_vars.items():
+        coords = data.coords
+        x_var = None
+        y_var = None
+        z_var = None
+        for co, coord in coords.items():
+            if "axis" in coord.attrs:
+                ax = coord.attrs["axis"]
+                if ax == "T":
+                    time_var = _check_var(time_var, co)
+                elif ax == "X":
+                    x_var = _check_var(x_var, co)
+                elif ax == "Y":
+                    y_var = _check_var(y_var, co)
+                elif ax == "Z":
+                    z_var = _check_var(z_var, co)
+            else:
+                if coord.dtype.type == np.datetime64:
+                    time_var = _check_var(time_var, co)
+
+        xyz = tuple(v for v in [x_var, y_var, z_var] if v is not None)
+        layers.append(Layer(var, xyz, static=time_var is None))
+
+    return time_var, layers
+
+
+def _check_var(old, new):
+    if old is None or old == new:
+        return new
+    raise ValueError(f"Axis already defined as {old}. Found second axis {new}.")
+
 
 def extract_grid(dataset, layer, fixed=None):
     """Extracts a 2D data array from a dataset"""
