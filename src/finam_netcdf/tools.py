@@ -90,7 +90,7 @@ def extract_grid(dataset, layer, fixed=None):
                 f"Dimension {ax} not available for NetCDF variable {layer.var}"
             )
 
-    axes = [ax.data for ax in xyz]
+    axes = [ax.data.copy() for ax in xyz]
 
     # re-order axes to xyz
     xdata = xdata.transpose(*layer.xyz)
@@ -99,7 +99,7 @@ def extract_grid(dataset, layer, fixed=None):
     for i, is_increase in enumerate(fm.data.check_axes_monotonicity(axes)):
         if not is_increase:
             ax_name = layer.xyz[i]
-            xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
+            xdata = xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
 
     # calculate properties of uniform grids
     spacing = fm.data.check_axes_uniformity(axes)
