@@ -78,7 +78,7 @@ class NetCdfStaticReader(fm.Component):
 
         self.create_connector()
 
-    def _connect(self):
+    def _connect(self, start_time):
         if self.data is None:
             self.data = {}
             for name, pars in self.output_vars.items():
@@ -87,6 +87,7 @@ class NetCdfStaticReader(fm.Component):
                 self.data[name] = (info, grid)
 
         self.try_connect(
+            start_time,
             push_infos={name: value[0] for name, value in self.data.items()},
             push_data={name: value[1] for name, value in self.data.items()},
         )
@@ -177,8 +178,8 @@ class NetCdfReader(fm.TimeComponent):
 
         self.time_index = None
         self.time_indices = None
-        self._time = None
         self.step = 0
+        self.data_pushed = False
 
         self._status = fm.ComponentStatus.CREATED
 
@@ -195,66 +196,74 @@ class NetCdfReader(fm.TimeComponent):
 
         for o, layer in self.output_vars.items():
             self.outputs.add(name=o, static=layer.static)
+
+        self._process_initial_data()
+
         self.create_connector()
 
-    def _connect(self):
-        if self.data is None:
-            self.data = {}
-            times = self.dataset.coords[self.time_var].dt
-
-            if self.time_limits is None:
-                self.time_indices = list(range(times.date.data.shape[0]))
-            else:
-                self.time_indices = []
-                mn = self.time_limits[0]
-                mx = self.time_limits[1]
-                for i, (d, t) in enumerate(zip(times.date.data, times.time.data)):
-                    tt = datetime.combine(d, t)
-                    if (mn is None or tt >= mn) and (mx is None or tt <= mx):
-                        self.time_indices.append(i)
-
-            self.times = [
-                datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
-            ]
-
-            for i in range(len(self.times) - 1):
-                if self.times[i] >= self.times[i + 1]:
-                    raise ValueError(
-                        f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
-                    )
-
-            if self.time_callback is None:
-                self.time_index = 0
-                t = self.times[self.time_indices[self.time_index]]
-                self._time = datetime.combine(t.date(), t.time())
-            else:
-                self._time, self.time_index = self.time_callback(self.step, None, None)
-
-            for name, pars in self.output_vars.items():
-                time_var = (
-                    {}
-                    if pars.static
-                    else {self.time_var: self.time_indices[self.time_index]}
-                )
-
-                info, grid = extract_grid(
-                    self.dataset,
-                    pars,
-                    time_var,
-                )
-                grid.name = name
-                info.time = self._time
-                if self.time_callback is not None:
-                    grid = fm.data.get_data(grid)
-                self.data[name] = (info, grid)
-
-        self.try_connect(
-            push_infos={name: value[0] for name, value in self.data.items()},
-            push_data={name: value[1] for name, value in self.data.items()},
-        )
+    def _connect(self, start_time):
+        if self.data_pushed:
+            self.try_connect(start_time)
+        else:
+            self.data_pushed = True
+            self.try_connect(
+                start_time,
+                push_infos={name: value[0] for name, value in self.data.items()},
+                push_data={name: value[1] for name, value in self.data.items()},
+            )
 
         if self.status == fm.ComponentStatus.CONNECTED:
             del self.data
+
+    def _process_initial_data(self):
+        self.data = {}
+        times = self.dataset.coords[self.time_var].dt
+
+        if self.time_limits is None:
+            self.time_indices = list(range(times.date.data.shape[0]))
+        else:
+            self.time_indices = []
+            mn = self.time_limits[0]
+            mx = self.time_limits[1]
+            for i, (d, t) in enumerate(zip(times.date.data, times.time.data)):
+                tt = datetime.combine(d, t)
+                if (mn is None or tt >= mn) and (mx is None or tt <= mx):
+                    self.time_indices.append(i)
+
+        self.times = [
+            datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
+        ]
+
+        for i in range(len(self.times) - 1):
+            if self.times[i] >= self.times[i + 1]:
+                raise ValueError(
+                    f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
+                )
+
+        if self.time_callback is None:
+            self.time_index = 0
+            t = self.times[self.time_indices[self.time_index]]
+            self._time = datetime.combine(t.date(), t.time())
+        else:
+            self._time, self.time_index = self.time_callback(self.step, None, None)
+
+        for name, pars in self.output_vars.items():
+            time_var = (
+                {}
+                if pars.static
+                else {self.time_var: self.time_indices[self.time_index]}
+            )
+
+            info, grid = extract_grid(
+                self.dataset,
+                pars,
+                time_var,
+            )
+            grid.name = name
+            info.time = self._time
+            if self.time_callback is not None:
+                grid = fm.data.get_data(grid)
+            self.data[name] = (info, grid)
 
     def _validate(self):
         pass

@@ -57,7 +57,7 @@ class TestWriter(unittest.TestCase):
             _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
             _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
 
-            composition.run(datetime(2000, 1, 31))
+            composition.run(t_max=datetime(2000, 1, 31))
 
             self.assertTrue(os.path.isfile(file))
 
@@ -106,7 +106,7 @@ class TestWriter(unittest.TestCase):
             _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
             _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
 
-            composition.run(datetime(2000, 1, 31))
+            composition.run(t_max=datetime(2000, 1, 31))
 
             self.assertTrue(os.path.isfile(file))
 
@@ -159,4 +159,4 @@ class TestWriter(unittest.TestCase):
             _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
 
             with self.assertRaises(ValueError):
-                composition.run(datetime(2000, 1, 31))
+                composition.run(t_max=datetime(2000, 1, 31))

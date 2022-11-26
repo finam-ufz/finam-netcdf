@@ -52,7 +52,7 @@ class TestChain(unittest.TestCase):
             reader["LAI"] >> writer["LAI"]
             reader["LAI"] >> consumer["LAI"]
 
-            comp.run(datetime(1990, 1, 31))
+            comp.run(t_max=datetime(1990, 1, 31))
 
             self.assertTrue(path.isfile(out_path))
 
@@ -77,7 +77,7 @@ class TestChain(unittest.TestCase):
 
             reader["LAI"] >> consumer["LAI"]
 
-            comp.run(datetime(1990, 1, 31))
+            comp.run(t_max=datetime(1990, 1, 31))
 
             self.assertEqual(len(data_1), len(data_2))
 
