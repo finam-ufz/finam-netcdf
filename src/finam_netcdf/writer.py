@@ -96,8 +96,8 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         self.create_connector(pull_data=list(self._input_dict.keys()))
 
-    def _connect(self):
-        self.try_connect(time=self._time)
+    def _connect(self, start_time):
+        self.try_connect(start_time=start_time)
 
         if self.status != fm.ComponentStatus.CONNECTED:
             return
@@ -205,8 +205,8 @@ class NetCdfPushWriter(fm.Component):
 
         self.create_connector(pull_data=list(self._input_dict.keys()))
 
-    def _connect(self):
-        self.try_connect()
+    def _connect(self, start_time):
+        self.try_connect(start_time)
 
         if self.status != fm.ComponentStatus.CONNECTED:
             return

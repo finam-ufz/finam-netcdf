@@ -47,6 +47,6 @@ if __name__ == "__main__":
     _ = lai_gen.outputs["LAI"] >> writer.inputs["LAI"]
     _ = sm_gen.outputs["SM"] >> writer.inputs["SM"]
 
-    composition.run(datetime(2000, 1, 31))
+    composition.run(end_time=datetime(2000, 1, 31))
 
     print("Wrote NetCDF file to %s" % (file,))
