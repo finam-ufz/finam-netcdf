@@ -19,4 +19,4 @@ if __name__ == "__main__":
 
     _ = reader.outputs["LAI"] >> fm.adapters.LinearTime() >> viewer.inputs["Grid"]
 
-    composition.run(t_max=datetime(1901, 1, 1, 0, 12))
+    composition.run(end_time=datetime(1901, 1, 1, 0, 12))

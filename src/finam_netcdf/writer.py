@@ -97,7 +97,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         self.create_connector(pull_data=list(self._input_dict.keys()))
 
     def _connect(self, start_time):
-        self.try_connect(time=start_time)
+        self.try_connect(start_time=start_time)
 
         if self.status != fm.ComponentStatus.CONNECTED:
             return

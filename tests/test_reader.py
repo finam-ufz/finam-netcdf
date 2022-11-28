@@ -25,7 +25,7 @@ class TestReader(unittest.TestCase):
 
         (reader.outputs["LAI"] >> consumer.inputs["Input"])
 
-        comp.run(t_max=datetime(1901, 1, 2))
+        comp.run(end_time=datetime(1901, 1, 2))
 
     def test_init_reader_no_time(self):
         path = "tests/data/temp.nc"
@@ -44,7 +44,7 @@ class TestReader(unittest.TestCase):
 
         (reader.outputs["Lat"] >> consumer.inputs["Input"])
 
-        comp.run(t_max=datetime(1901, 1, 2))
+        comp.run(end_time=datetime(1901, 1, 2))
 
     def test_time_reader(self):
         path = "tests/data/lai.nc"
@@ -89,7 +89,7 @@ class TestReader(unittest.TestCase):
             datetime(1901, 1, 1, 0, 1, 0),
         )
 
-        comp.run(t_max=datetime(1901, 1, 1, 0, 12))
+        comp.run(end_time=datetime(1901, 1, 1, 0, 12))
 
         self.assertNotEqual(
             fm.data.get_magnitude(consumer.data["Input"][0, 0, 0]),
@@ -121,7 +121,7 @@ class TestReader(unittest.TestCase):
 
         reader.outputs["lai"] >> consumer.inputs["Input"]
 
-        comp.run(t_max=datetime(1901, 1, 1, 0, 12))
+        comp.run(end_time=datetime(1901, 1, 1, 0, 12))
 
     def test_time_reader_no_time(self):
         path = "tests/data/temp.nc"
@@ -147,7 +147,7 @@ class TestReader(unittest.TestCase):
 
         reader.outputs["Lat"] >> consumer.inputs["Input"]
 
-        comp.run(t_max=datetime(1901, 1, 1, 0, 12))
+        comp.run(end_time=datetime(1901, 1, 1, 0, 12))
 
     def test_time_reader_limits(self):
         path = "tests/data/lai.nc"
@@ -169,7 +169,7 @@ class TestReader(unittest.TestCase):
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
 
-        comp.run(t_max=datetime(1901, 1, 1, 0, 12))
+        comp.run(end_time=datetime(1901, 1, 1, 0, 12))
 
     def test_time_reader_callback(self):
         start = datetime(2000, 1, 1)
@@ -194,4 +194,4 @@ class TestReader(unittest.TestCase):
 
         reader.outputs["LAI"] >> consumer.inputs["Input"]
 
-        comp.run(t_max=datetime(2000, 12, 31))
+        comp.run(end_time=datetime(2000, 12, 31))
