@@ -189,7 +189,6 @@ class NetCdfReader(fm.TimeComponent):
 
     def _initialize(self):
         self.dataset = xr.open_dataset(self.path)
-
         if self.output_vars is None:
             self.time_var, layers = extract_layers(self.dataset)
             self.output_vars = {l.var: l for l in layers}

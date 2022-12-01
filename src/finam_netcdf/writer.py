@@ -83,6 +83,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         self._time = start
         self.time_var = time_var
         self.data_arrays = {}
+        self.timestamps = []
 
         self.status = fm.ComponentStatus.CREATED
 
@@ -107,6 +108,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         )
 
         self.data_arrays = {}
+        self.timestamps.append(self.time)
         for name, layer in self._input_dict.items():
             data = self.connector.in_data[name].pint.dequantify()
             data.attrs.update(self.inputs[name].info.meta)
@@ -118,6 +120,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
     def _update(self):
         self._time += self._step
 
+        self.timestamps.append(self.time)
         for name, inp in self.inputs.items():
             layer = self._input_dict[name]
             new_var = inp.pull_data(self.time).pint.dequantify()
@@ -131,6 +134,9 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
         dataset = dataset.transpose(self.time_var, *dims)
+        dataset = dataset.assign_coords(
+            dict(time=[np.datetime64(t).astype(datetime) for t in self.timestamps])
+        )
 
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
@@ -188,6 +194,7 @@ class NetCdfPushWriter(fm.Component):
         self.data_arrays = {}
 
         self.last_update = None
+        self.timestamps = []
 
         self._status = fm.ComponentStatus.CREATED
 
@@ -232,6 +239,9 @@ class NetCdfPushWriter(fm.Component):
 
         dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
         dataset = dataset.transpose(self.time_var, *dims)
+        dataset = dataset.assign_coords(
+            dict(time=[np.datetime64(t).astype(datetime) for t in self.timestamps])
+        )
 
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
@@ -243,6 +253,9 @@ class NetCdfPushWriter(fm.Component):
             fm.ComponentStatus.CONNECTING_IDLE,
         ):
             self.last_update = time
+            if len(self.timestamps) == 0:
+                self.timestamps.append(time)
+
             return
 
         if not isinstance(time, datetime):
@@ -255,6 +268,8 @@ class NetCdfPushWriter(fm.Component):
             lengths = [a.shape[0] for a in self.data_arrays.values()]
             if lengths.count(lengths[0]) != len(lengths):
                 raise ValueError(f"Incomplete dataset for time {self.last_update}")
+
+            self.timestamps.append(time)
 
         self.last_update = time
 

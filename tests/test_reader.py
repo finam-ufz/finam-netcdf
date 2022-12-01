@@ -81,27 +81,11 @@ class TestReader(unittest.TestCase):
             fm.data.get_magnitude(consumer.data["Input-stat"][0, 0, 0]),
         )
 
-        self.assertEqual(
-            fm.data.get_time(consumer.data["Input"])[0], datetime(1901, 1, 1, 0, 1, 0)
-        )
-        self.assertEqual(
-            fm.data.get_time(consumer.data["Input-stat"])[0],
-            datetime(1901, 1, 1, 0, 1, 0),
-        )
-
         comp.run(end_time=datetime(1901, 1, 1, 0, 12))
 
         self.assertNotEqual(
             fm.data.get_magnitude(consumer.data["Input"][0, 0, 0]),
             fm.data.get_magnitude(consumer.data["Input-stat"][0, 0, 0]),
-        )
-
-        self.assertEqual(
-            fm.data.get_time(consumer.data["Input"])[0], datetime(1901, 1, 1, 0, 12, 0)
-        )
-        self.assertEqual(
-            fm.data.get_time(consumer.data["Input-stat"])[0],
-            datetime(1901, 1, 1, 0, 12, 0),
         )
 
     def test_time_reader_auto(self):
