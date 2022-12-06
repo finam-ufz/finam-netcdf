@@ -79,11 +79,14 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         self._path = path
         self._input_dict = inputs
+        self._input_names = {v.var: k for k, v in inputs.items()}
         self._step = step
         self._time = start
         self.time_var = time_var
         self.data_arrays = {}
         self.timestamps = []
+        self.attrs = {}
+        self.coords = None
 
         self.status = fm.ComponentStatus.CREATED
 
@@ -103,16 +106,19 @@ class NetCdfTimedWriter(fm.TimeComponent):
         if self.status != fm.ComponentStatus.CONNECTED:
             return
 
-        _variables, coords = _extract_vars_dims(
+        _variables, self.coords = _extract_vars_dims(
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
         self.data_arrays = {}
         self.timestamps.append(self.time)
         for name, layer in self._input_dict.items():
-            data = self.connector.in_data[name].pint.dequantify()
-            data.attrs.update(self.inputs[name].info.meta)
-            self.data_arrays[layer.var] = data.assign_coords(coords)
+            data = self.connector.in_data[name].magnitude
+            attrs = self.inputs[name].info.meta.copy()
+            if "units" in attrs:
+                attrs["units"] = str(attrs["units"])
+            self.attrs[layer.var] = attrs
+            self.data_arrays[layer.var] = data
 
     def _validate(self):
         pass
@@ -123,20 +129,31 @@ class NetCdfTimedWriter(fm.TimeComponent):
         self.timestamps.append(self.time)
         for name, inp in self.inputs.items():
             layer = self._input_dict[name]
-            new_var = inp.pull_data(self.time).pint.dequantify()
+            new_var = inp.pull_data(self.time).magnitude
 
             var = self.data_arrays[layer.var]
 
-            self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
+            self.data_arrays[layer.var] = np.concatenate((var, new_var), axis=0)
 
     def _finalize(self):
-        dataset = xr.Dataset(data_vars=self.data_arrays)
-
-        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
-        dataset = dataset.transpose(self.time_var, *dims)
-        dataset = dataset.assign_coords(
+        self.coords.update(
             dict(time=[np.datetime64(t).astype(datetime) for t in self.timestamps])
         )
+        dataset = xr.Dataset(
+            data_vars={
+                k: (
+                    ["time"]
+                    + list(self.inputs[self._input_names[k]].info.grid.axes_names),
+                    v,
+                    self.attrs[k],
+                )
+                for k, v in self.data_arrays.items()
+            },
+            coords=self.coords,
+        )
+        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
+
+        dataset = dataset.transpose(self.time_var, *dims)
 
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
@@ -190,8 +207,11 @@ class NetCdfPushWriter(fm.Component):
 
         self._path = path
         self._input_dict = inputs
+        self._input_names = {v.var: k for k, v in inputs.items()}
         self.time_var = time_var
         self.data_arrays = {}
+        self.attrs = {}
+        self.coords = None
 
         self.last_update = None
         self.timestamps = []
@@ -218,15 +238,18 @@ class NetCdfPushWriter(fm.Component):
         if self.status != fm.ComponentStatus.CONNECTED:
             return
 
-        _variables, coords = _extract_vars_dims(
+        _variables, self.coords = _extract_vars_dims(
             self.connector.in_infos, self.connector.in_data, self._input_dict
         )
 
         self.data_arrays = {}
         for name, layer in self._input_dict.items():
-            data = self.connector.in_data[name].pint.dequantify()
-            data.attrs.update(self.inputs[name].info.meta)
-            self.data_arrays[layer.var] = data.assign_coords(coords)
+            data = self.connector.in_data[name].magnitude
+            attrs = self.inputs[name].info.meta.copy()
+            if "units" in attrs:
+                attrs["units"] = str(attrs["units"])
+            self.attrs[layer.var] = attrs
+            self.data_arrays[layer.var] = data
 
     def _validate(self):
         pass
@@ -235,13 +258,24 @@ class NetCdfPushWriter(fm.Component):
         pass
 
     def _finalize(self):
-        dataset = xr.Dataset(data_vars=self.data_arrays)
-
-        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
-        dataset = dataset.transpose(self.time_var, *dims)
-        dataset = dataset.assign_coords(
+        self.coords.update(
             dict(time=[np.datetime64(t).astype(datetime) for t in self.timestamps])
         )
+        dataset = xr.Dataset(
+            data_vars={
+                k: (
+                    ["time"]
+                    + list(self.inputs[self._input_names[k]].info.grid.axes_names),
+                    v,
+                    self.attrs[k],
+                )
+                for k, v in self.data_arrays.items()
+            },
+            coords=self.coords,
+        )
+        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
+
+        dataset = dataset.transpose(self.time_var, *dims)
 
         dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
         dataset.close()
@@ -274,10 +308,11 @@ class NetCdfPushWriter(fm.Component):
         self.last_update = time
 
         layer = self._input_dict[name]
-        new_var = caller.pull_data(self.last_update).pint.dequantify()
+        data = caller.pull_data(self.last_update)
+        new_var = data.magnitude
 
         var = self.data_arrays[layer.var]
-        self.data_arrays[layer.var] = xr.concat((var, new_var), dim=self.time_var)
+        self.data_arrays[layer.var] = np.concatenate((var, new_var), axis=0)
 
         self.update()
 

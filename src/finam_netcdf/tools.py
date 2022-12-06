@@ -132,7 +132,6 @@ def extract_grid(dataset, layer, fixed=None):
         )
 
     meta = copy.copy(xdata.attrs)
-    units = meta.get("units", "")
 
     # re-insert the time dimension
     time = None
@@ -144,7 +143,7 @@ def extract_grid(dataset, layer, fixed=None):
 
     info = fm.Info(time=time, grid=grid, meta=meta)
 
-    return info, xdata.data * fm.UNITS.Unit(units)
+    return info, xdata.data * info.units
 
 
 def create_point_axis(cell_axis):

@@ -261,7 +261,7 @@ class NetCdfReader(fm.TimeComponent):
             grid.name = name
             info.time = self._time
             if self.time_callback is not None:
-                grid = fm.data.get_data(grid)
+                grid = fm.data.strip_time(grid, info.grid)
             self.data[name] = (info, grid)
 
     def _validate(self):
@@ -284,12 +284,11 @@ class NetCdfReader(fm.TimeComponent):
             if pars.static:
                 continue
 
-            _info, grid = extract_grid(
+            info, grid = extract_grid(
                 self.dataset, pars, {self.time_var: self.time_indices[self.time_index]}
             )
-            grid.name = name
             if self.time_callback is not None:
-                grid = fm.data.get_data(grid)
+                grid = fm.data.strip_time(grid, info.grid)
             self._outputs[name].push_data(grid, self._time)
 
     def _finalize(self):
