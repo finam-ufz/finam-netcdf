@@ -143,7 +143,7 @@ def extract_grid(dataset, layer, fixed=None):
 
     info = fm.Info(time=time, grid=grid, meta=meta)
 
-    return info, xdata.data * info.units
+    return info, fm.UNITS.Quantity(xdata.data, info.units)
 
 
 def create_point_axis(cell_axis):
