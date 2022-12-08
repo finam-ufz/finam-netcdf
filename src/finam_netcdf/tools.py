@@ -70,7 +70,17 @@ def _check_var(old, new):
 
 
 def extract_grid(dataset, layer, fixed=None):
-    """Extracts a 2D data array from a dataset"""
+    """Extracts a 2D data array from a dataset
+
+    Parameters
+    ----------
+    dataset : xarray.DataSet
+        The input dataset
+    layer : Layer
+        The layer definition
+    fixed : dict of str, int, optional
+        Fixed variables with their indices
+    """
     variable = dataset[layer.var].load()
     xyz = [variable.coords[ax] for ax in layer.xyz]
 
@@ -122,7 +132,6 @@ def extract_grid(dataset, layer, fixed=None):
         )
 
     meta = copy.copy(xdata.attrs)
-    xdata = fm.data.quantify(xdata)
 
     # re-insert the time dimension
     time = None
@@ -134,7 +143,7 @@ def extract_grid(dataset, layer, fixed=None):
 
     info = fm.Info(time=time, grid=grid, meta=meta)
 
-    return info, xdata
+    return info, fm.UNITS.Quantity(xdata.data, info.units)
 
 
 def create_point_axis(cell_axis):
