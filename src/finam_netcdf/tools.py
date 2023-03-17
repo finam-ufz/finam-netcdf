@@ -3,6 +3,7 @@ import copy
 
 import finam as fm
 import numpy as np
+from netCDF4 import num2date
 
 
 class Layer:
@@ -33,31 +34,41 @@ class Layer:
 
 
 def extract_layers(dataset):
-    """Extracts layer information from a dataset"""
+    """
+    Extracts layer information from a dataset
+    """
+    # needed variables
     layers = []
+    var_list = []
     time_var = None
+    x_var = None
+    y_var = None
+    z_var = None
 
-    for var, data in dataset.data_vars.items():
-        coords = data.coords
-        x_var = None
-        y_var = None
-        z_var = None
-        for co, coord in coords.items():
-            if "axis" in coord.attrs:
-                ax = coord.attrs["axis"]
+    for var, data in dataset.variables.items():
+        # getting measured variables with at least time,lon,lat info
+        if len(data.dimensions) > 2:
+            var_list.append(data.name)
+        # assigning axis
+        else:
+            if "axis" in data.ncattrs():
+                ax = data.axis
                 if ax == "T":
-                    time_var = _check_var(time_var, co)
+                    time_var = _check_var(time_var, data.name)
                 elif ax == "X":
-                    x_var = _check_var(x_var, co)
+                    x_var = _check_var(x_var, data.name)
                 elif ax == "Y":
-                    y_var = _check_var(y_var, co)
+                    y_var = _check_var(y_var, data.name)
                 elif ax == "Z":
-                    z_var = _check_var(z_var, co)
+                    z_var = _check_var(z_var, data.name)
             else:
-                if coord.dtype.type == np.datetime64:
-                    time_var = _check_var(time_var, co)
+                if "calendar" in data.ncattrs():
+                    time_var = _check_var(time_var, data.name)
 
-        xyz = tuple(v for v in [x_var, y_var, z_var] if v is not None)
+    # creating coords tuple
+    xyz = tuple(v for v in [x_var, y_var, z_var] if v is not None)
+    # appending to layers
+    for var in var_list:
         layers.append(Layer(var, xyz, static=time_var is None))
 
     return time_var, layers
@@ -74,41 +85,41 @@ def extract_grid(dataset, layer, fixed=None):
 
     Parameters
     ----------
-    dataset : xarray.DataSet
+    dataset : netCDF4.DataSet
         The input dataset
     layer : Layer
         The layer definition
     fixed : dict of str, int, optional
         Fixed variables with their indices
     """
-    variable = dataset[layer.var].load()
-    xyz = [variable.coords[ax] for ax in layer.xyz]
+    var_data = dataset[layer.var][:]  # xarray values for temp
+    xyz_data = [dataset.variables[ax] for ax in layer.xyz]
 
-    xdata = variable.isel(layer.fixed if fixed is None else dict(layer.fixed, **fixed))
+    # DON'T GET THIS ISEL PART! ----------------
+    # ncdata = variable.isel(layer.fixed if fixed is None else dict(layer.fixed, **fixed))
 
-    if len(xdata.dims) > 3:
+    if len(var_data.dimensions) > 3:
         raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
-    if len(xdata.dims) != len(layer.xyz):
+    if len(var_data.dimensions) != len(layer.xyz):
         raise ValueError(
             f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
         )
 
     for ax in layer.xyz:
-        if ax not in xdata.dims:
+        if ax not in var_data.dimensions:
             raise ValueError(
                 f"Dimension {ax} not available for NetCDF variable {layer.var}"
             )
 
-    axes = [ax.data.copy() for ax in xyz]
+    # copying axes values into a np array
+    axes = [np.array(ax[:].copy()) for ax in xyz_data]
 
-    # re-order axes to xyz
-    xdata = xdata.transpose(*layer.xyz)
+    # re-order axes to xyz_data
+    axes = axes.transpose(*layer.xyz)
 
-    # flip to make all axes increasing
-    for i, is_increase in enumerate(fm.data.check_axes_monotonicity(axes)):
-        if not is_increase:
-            ax_name = layer.xyz[i]
-            xdata = xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
+    # flip to make all axes increase
+    # axes are automatically flipped when check_axes_monotonicity returns FALSE
+    fm.data.check_axes_monotonicity(axes)
 
     # calculate properties of uniform grids
     spacing = fm.data.check_axes_uniformity(axes)
@@ -131,20 +142,31 @@ def extract_grid(dataset, layer, fixed=None):
             point_axes, axes_names=layer.xyz, data_location=fm.Location.CELLS
         )
 
-    meta = copy.copy(xdata.attrs)
+    meta = {}
+    for name in dataset.ncattrs():
+        meta[name] = getattr(dataset, name)
+    meta = copy.copy(meta)
 
     # re-insert the time dimension
-    time = None
-    if not layer.static and "time" in xdata.coords:
-        time = fm.data.to_datetime(xdata["time"].data)
+    times = None
+    if not layer.static and "time" in dataset.dimensions:
+        # variables needed
+        nctime = dataset["time"][:]
+        time_cal = dataset["time"].calendar
+        time_unit = dataset.variables["time"].units
 
-    xdata = xdata.drop_vars(xdata.coords)
-    xdata = xdata.expand_dims(dim="time", axis=0)
+        # convert time fom cftime.real_datetime to datetime64 format
+        times = num2date(
+            nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
+        )
+        times = np.array(times)
+        times = times.astype("datetime64[ns]")
+        times = fm.data.to_datetime(times)
 
-    info = fm.Info(time=time, grid=grid, meta=meta)
+    info = fm.Info(time=times, grid=grid, meta=meta)
 
-    return info, fm.UNITS.Quantity(xdata.data, info.units)
-
+    #Are final changes in fm.UNITS to handle Netcdf4 needed? not sure what to do - What about var_data?
+    return info, fm.UNITS.Quantity(axes, info.units)
 
 def create_point_axis(cell_axis):
     """Create a point axis from a cell axis"""

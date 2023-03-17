@@ -15,6 +15,7 @@ import pint
 # pylint: disable-next=W0611
 import pint_xarray
 import xarray as xr
+from netCDF4 import Dataset, num2date
 
 from .tools import Layer
 

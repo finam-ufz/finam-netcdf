@@ -3,10 +3,11 @@ NetCDF reader components.
 """
 from __future__ import annotations
 
-from datetime import datetime
+import datetime
+import numpy as np
 
 import finam as fm
-import xarray as xr
+from netCDF4 import Dataset, num2date
 
 from .tools import Layer, extract_grid, extract_layers
 
@@ -57,7 +58,7 @@ class NetCdfStaticReader(fm.Component):
         self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
-        self.dataset = xr.open_dataset(self.path)
+        self.dataset = Dataset(self.path)
 
         if self.output_vars is None:
             _time_var, layers = extract_layers(self.dataset)
@@ -188,7 +189,7 @@ class NetCdfReader(fm.TimeComponent):
         return None
 
     def _initialize(self):
-        self.dataset = xr.open_dataset(self.path)
+        self.dataset = Dataset(self.path)
         if self.output_vars is None:
             self.time_var, layers = extract_layers(self.dataset)
             self.output_vars = {l.var: l for l in layers}
@@ -215,23 +216,32 @@ class NetCdfReader(fm.TimeComponent):
             del self.data
 
     def _process_initial_data(self):
+        # variables needed
         self.data = {}
-        times = self.dataset.coords[self.time_var].dt
+        nctime = self.dataset[self.time_var][:]
+        time_cal = self.dataset[self.time_var].calendar
+        time_unit = self.dataset.variables[self.time_var].units
+
+        # convert time fom cftime.real_datetime to datetime64 format
+        times = num2date(
+            nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
+        )
+        times = np.array(times)
+        times = times.astype("datetime64[ns]")
+        times = fm.data.to_datetime(times)
 
         if self.time_limits is None:
-            self.time_indices = list(range(times.date.data.shape[0]))
+            list_of_floats = self.dataset[self.time_var][:].tolist()
+            self.time_indices = [ int(item) for item in list_of_floats]
         else:
             self.time_indices = []
             mn = self.time_limits[0]
             mx = self.time_limits[1]
-            for i, (d, t) in enumerate(zip(times.date.data, times.time.data)):
-                tt = datetime.combine(d, t)
-                if (mn is None or tt >= mn) and (mx is None or tt <= mx):
+            for i, t in enumerate(times):
+                if (mn is None or t.date() >= mn) and (mx is None or t.date() <= mx):
                     self.time_indices.append(i)
 
-        self.times = [
-            datetime.combine(d, t) for d, t in zip(times.date.data, times.time.data)
-        ]
+        self.times = [ t.date() for i, t in enumerate(times)]
 
         for i in range(len(self.times) - 1):
             if self.times[i] >= self.times[i + 1]:
@@ -241,8 +251,7 @@ class NetCdfReader(fm.TimeComponent):
 
         if self.time_callback is None:
             self.time_index = 0
-            t = self.times[self.time_indices[self.time_index]]
-            self._time = datetime.combine(t.date(), t.time())
+            self._time = self.times[self.time_indices[self.time_index]]
         else:
             self._time, self.time_index = self.time_callback(self.step, None, None)
 
