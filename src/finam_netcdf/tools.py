@@ -3,6 +3,7 @@ import copy
 
 import finam as fm
 import numpy as np
+import pandas as pd
 from netCDF4 import num2date
 
 
@@ -37,7 +38,7 @@ def extract_layers(dataset):
     """
     Extracts layer information from a dataset
     """
-    # needed variables
+    # needed variables  
     layers = []
     var_list = []
     time_var = None
@@ -80,7 +81,7 @@ def _check_var(old, new):
     raise ValueError(f"Axis already defined as {old}. Found second axis {new}.")
 
 
-def extract_grid(dataset, layer, fixed=None):
+def extract_grid(dataset, layer, time_index=None):
     """Extracts a 2D data array from a dataset
 
     Parameters
@@ -89,14 +90,10 @@ def extract_grid(dataset, layer, fixed=None):
         The input dataset
     layer : Layer
         The layer definition
-    fixed : dict of str, int, optional
-        Fixed variables with their indices
+    time_index : int, optional
+        time_index indice of a variable 
     """
-    var_data = dataset[layer.var][:]  # xarray values for temp
-    xyz_data = [dataset.variables[ax] for ax in layer.xyz]
-
-    # DON'T GET THIS ISEL PART! ----------------
-    # ncdata = variable.isel(layer.fixed if fixed is None else dict(layer.fixed, **fixed))
+    var_data = dataset[layer.var]
 
     if len(var_data.dimensions) > 3:
         raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
@@ -104,22 +101,26 @@ def extract_grid(dataset, layer, fixed=None):
         raise ValueError(
             f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
         )
-
+    
     for ax in layer.xyz:
         if ax not in var_data.dimensions:
             raise ValueError(
                 f"Dimension {ax} not available for NetCDF variable {layer.var}"
             )
+    
+    meta = {}
+    for name in var_data.ncattrs():
+        meta[name] = getattr(var_data, name)
 
-    # copying axes values into a np array
-    axes = [np.array(ax[:].copy()) for ax in xyz_data]
+    # filtering variable data by time_index as np array
+    if time_index is None:
+        var_data = var_data[:].filled(fill_value=np.nan)
+    else:
+        var_data = var_data[time_index].filled(fill_value=np.nan)
 
-    # re-order axes to xyz_data
-    axes = axes.transpose(*layer.xyz)
-
-    # flip to make all axes increase
-    # axes are automatically flipped when check_axes_monotonicity returns FALSE
-    fm.data.check_axes_monotonicity(axes)
+    # getting coordinates data
+    xyz_data = [dataset.variables[ax] for ax in layer.xyz]
+    axes = np.array([  np.array(ax[:]) for ax in xyz_data ], dtype=object)
 
     # calculate properties of uniform grids
     spacing = fm.data.check_axes_uniformity(axes)
@@ -142,31 +143,22 @@ def extract_grid(dataset, layer, fixed=None):
             point_axes, axes_names=layer.xyz, data_location=fm.Location.CELLS
         )
 
-    meta = {}
-    for name in dataset.ncattrs():
-        meta[name] = getattr(dataset, name)
-    meta = copy.copy(meta)
-
-    # re-insert the time dimension
+    # creating the time dimension
     times = None
     if not layer.static and "time" in dataset.dimensions:
-        # variables needed
         nctime = dataset["time"][:]
         time_cal = dataset["time"].calendar
         time_unit = dataset.variables["time"].units
-
-        # convert time fom cftime.real_datetime to datetime64 format
         times = num2date(
             nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
         )
-        times = np.array(times)
-        times = times.astype("datetime64[ns]")
+        times = np.array(times).astype("datetime64[ns]")
+        times = pd.DataFrame(times, columns=['time'])
         times = fm.data.to_datetime(times)
 
     info = fm.Info(time=times, grid=grid, meta=meta)
 
-    #Are final changes in fm.UNITS to handle Netcdf4 needed? not sure what to do - What about var_data?
-    return info, fm.UNITS.Quantity(axes, info.units)
+    return info, fm.UNITS.Quantity(var_data, info.units)
 
 def create_point_axis(cell_axis):
     """Create a point axis from a cell axis"""
