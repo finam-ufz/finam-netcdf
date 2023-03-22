@@ -3,8 +3,9 @@ NetCDF reader components.
 """
 from __future__ import annotations
 
-import datetime
+from datetime import datetime
 import numpy as np
+import pandas as pd
 
 import finam as fm
 from netCDF4 import Dataset, num2date
@@ -83,9 +84,9 @@ class NetCdfStaticReader(fm.Component):
         if self.data is None:
             self.data = {}
             for name, pars in self.output_vars.items():
-                info, grid = extract_grid(self.dataset, pars, pars.fixed)
-                grid.name = name
-                self.data[name] = (info, grid)
+                info, data= extract_grid(self.dataset, pars, pars.fixed)
+                data.name = name
+                self.data[name] = (info, data)
 
         self.try_connect(
             start_time,
@@ -222,26 +223,26 @@ class NetCdfReader(fm.TimeComponent):
         time_cal = self.dataset[self.time_var].calendar
         time_unit = self.dataset.variables[self.time_var].units
 
-        # convert time fom cftime.real_datetime to datetime64 format
+        # convert time fom cftime.real_datetime to datetime format
         times = num2date(
             nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
         )
-        times = np.array(times)
-        times = times.astype("datetime64[ns]")
-        times = fm.data.to_datetime(times)
+        times = np.array(times).astype("datetime64[ns]")
+        times = pd.DataFrame(times, columns=['time'])
+        times = times['time'].dt
 
         if self.time_limits is None:
-            list_of_floats = self.dataset[self.time_var][:].tolist()
-            self.time_indices = [ int(item) for item in list_of_floats]
+            self.time_indices = list(range(times.date.shape[0]))
         else:
             self.time_indices = []
             mn = self.time_limits[0]
             mx = self.time_limits[1]
-            for i, t in enumerate(times):
-                if (mn is None or t.date() >= mn) and (mx is None or t.date() <= mx):
+            for i, (d, t) in enumerate(zip(times.date, times.time)):
+                tt = datetime.combine(d, t)
+                if (mn is None or tt >= mn) and (mx is None or tt <= mx):
                     self.time_indices.append(i)
 
-        self.times = [ t.date() for i, t in enumerate(times)]
+        self.times = [datetime.combine(d, t) for d, t in zip(times.date, times.time)]
 
         for i in range(len(self.times) - 1):
             if self.times[i] >= self.times[i + 1]:
@@ -251,27 +252,28 @@ class NetCdfReader(fm.TimeComponent):
 
         if self.time_callback is None:
             self.time_index = 0
-            self._time = self.times[self.time_indices[self.time_index]]
+            t = self.times[self.time_indices[self.time_index]]
+            self._time = datetime.combine(t.date(), t.time())
         else:
             self._time, self.time_index = self.time_callback(self.step, None, None)
 
         for name, pars in self.output_vars.items():
-            time_var = (
-                {}
+            time_index = (
+                None
                 if pars.static
-                else {self.time_var: self.time_indices[self.time_index]}
+                else self.time_indices[self.time_index]
             )
 
-            info, grid = extract_grid(
+            info, data = extract_grid(
                 self.dataset,
                 pars,
-                time_var,
+                time_index,
             )
-            grid.name = name
+            data.name = name
             info.time = self._time
             if self.time_callback is not None:
-                grid = fm.data.strip_time(grid, info.grid)
-            self.data[name] = (info, grid)
+                data = fm.data.strip_time(data, info.grid)
+            self.data[name] = (info, data)
 
     def _validate(self):
         pass
@@ -293,12 +295,12 @@ class NetCdfReader(fm.TimeComponent):
             if pars.static:
                 continue
 
-            info, grid = extract_grid(
+            info, data = extract_grid(
                 self.dataset, pars, {self.time_var: self.time_indices[self.time_index]}
             )
             if self.time_callback is not None:
-                grid = fm.data.strip_time(grid, info.grid)
-            self._outputs[name].push_data(grid, self._time)
+                data = fm.data.strip_time(data, info.grid)
+            self._outputs[name].push_data(data, self._time)
 
     def _finalize(self):
         self.dataset.close()
