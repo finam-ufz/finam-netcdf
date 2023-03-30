@@ -9,13 +9,7 @@ from functools import partial
 import finam as fm
 import numpy as np
 
-# pylint: disable-next=W0611
-import pint
-
-# pylint: disable-next=W0611
-import pint_xarray
-import xarray as xr
-from netCDF4 import Dataset, num2date
+from netCDF4 import Dataset, date2num
 
 from .tools import Layer
 
@@ -84,10 +78,8 @@ class NetCdfTimedWriter(fm.TimeComponent):
         self._step = step
         self._time = start
         self.time_var = time_var
-        self.data_arrays = {}
-        self.timestamps = []
-        self.attrs = {}
-        self.coords = None
+        self.dataset = None
+        self.timestamp_counter = 0
 
         self.status = fm.ComponentStatus.CREATED
 
@@ -99,65 +91,50 @@ class NetCdfTimedWriter(fm.TimeComponent):
         for inp in self._input_dict.keys():
             self.inputs.add(name=inp, time=self.time, grid=None, units=None)
 
+        self.dataset = Dataset(self._path, "w")
+
         self.create_connector(pull_data=list(self._input_dict.keys()))
 
     def _connect(self, start_time):
         self.try_connect(start_time=start_time)
-
         if self.status != fm.ComponentStatus.CONNECTED:
             return
 
-        _variables, self.coords = _extract_vars_dims(
-            self.connector.in_infos, self.connector.in_data, self._input_dict
+        _create_nc_framework(
+            self.dataset,
+            self.time_var,
+            self._time,
+            self._step,
+            self.connector.in_infos,
+            self.connector.in_data,
+            self._input_dict,
         )
 
-        self.data_arrays = {}
-        self.timestamps.append(self.time)
-        for name, layer in self._input_dict.items():
-            data = self.connector.in_data[name].magnitude
-            attrs = self.inputs[name].info.meta.copy()
-            if "units" in attrs:
-                attrs["units"] = str(attrs["units"])
-            self.attrs[layer.var] = attrs
-            self.data_arrays[layer.var] = data
+        # adding time and var data to the first timestamp
+        for name in self._input_dict:
+            self.dataset[name][self.timestamp_counter, :, :] = self.connector.in_data[
+                name
+            ].magnitude
+            self.dataset[self.time_var][self.timestamp_counter] = date2num(
+                self._time, self.dataset[self.time_var].units
+            )
 
     def _validate(self):
         pass
 
     def _update(self):
         self._time += self._step
-
-        self.timestamps.append(self.time)
+        self.timestamp_counter += 1
         for name, inp in self.inputs.items():
-            layer = self._input_dict[name]
-            new_var = inp.pull_data(self.time).magnitude
-
-            var = self.data_arrays[layer.var]
-
-            self.data_arrays[layer.var] = np.concatenate((var, new_var), axis=0)
+            self.dataset[name][self.timestamp_counter, :, :] = inp.pull_data(
+                self._time
+            ).magnitude
+            self.dataset[self.time_var][self.timestamp_counter] = date2num(
+                self._time, self.dataset[self.time_var].units
+            )
 
     def _finalize(self):
-        self.coords.update(
-            dict(time=[np.datetime64(t).astype(datetime) for t in self.timestamps])
-        )
-        dataset = xr.Dataset(
-            data_vars={
-                k: (
-                    ["time"]
-                    + list(self.inputs[self._input_names[k]].info.grid.axes_names),
-                    v,
-                    self.attrs[k],
-                )
-                for k, v in self.data_arrays.items()
-            },
-            coords=self.coords,
-        )
-        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
-
-        dataset = dataset.transpose(self.time_var, *dims)
-
-        dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
-        dataset.close()
+        self.dataset.close()
 
 
 class NetCdfPushWriter(fm.Component):
@@ -210,9 +187,8 @@ class NetCdfPushWriter(fm.Component):
         self._input_dict = inputs
         self._input_names = {v.var: k for k, v in inputs.items()}
         self.time_var = time_var
-        self.data_arrays = {}
-        self.attrs = {}
-        self.coords = None
+        self.dataset = None
+        self.timestamp_counter = 0
 
         self.last_update = None
         self.timestamps = []
@@ -230,6 +206,7 @@ class NetCdfPushWriter(fm.Component):
                     units=None,
                 )
             )
+        self.dataset = Dataset(self._path, "w")
 
         self.create_connector(pull_data=list(self._input_dict.keys()))
 
@@ -239,47 +216,41 @@ class NetCdfPushWriter(fm.Component):
         if self.status != fm.ComponentStatus.CONNECTED:
             return
 
-        _variables, self.coords = _extract_vars_dims(
-            self.connector.in_infos, self.connector.in_data, self._input_dict
+        _create_nc_framework(
+            self.dataset,
+            self.time_var,
+            self._time,
+            self._step,
+            self.connector.in_infos,
+            self.connector.in_data,
+            self._input_dict,
         )
 
-        self.data_arrays = {}
-        for name, layer in self._input_dict.items():
-            data = self.connector.in_data[name].magnitude
-            attrs = self.inputs[name].info.meta.copy()
-            if "units" in attrs:
-                attrs["units"] = str(attrs["units"])
-            self.attrs[layer.var] = attrs
-            self.data_arrays[layer.var] = data
+        # adding time and var data to the first timestamp
+        for name in self._input_dict:
+            self.dataset[name][self.timestamp_counter, :, :] = self.connector.in_data[
+                name
+            ].magnitude
+            self.dataset[self.time_var][self.timestamp_counter] = date2num(
+                self._time, self.dataset[self.time_var].units
+            )
 
     def _validate(self):
         pass
 
     def _update(self):
-        pass
+        self._time += self._step
+        self.timestamp_counter += 1
+        for name, inp in self.inputs.items():
+            self.dataset[name][self.timestamp_counter, :, :] = inp.pull_data(
+                self._time
+            ).magnitude
+            self.dataset[self.time_var][self.timestamp_counter] = date2num(
+                self._time, self.dataset[self.time_var].units
+            )
 
     def _finalize(self):
-        self.coords.update(
-            dict(time=[np.datetime64(t).astype(datetime) for t in self.timestamps])
-        )
-        dataset = xr.Dataset(
-            data_vars={
-                k: (
-                    ["time"]
-                    + list(self.inputs[self._input_names[k]].info.grid.axes_names),
-                    v,
-                    self.attrs[k],
-                )
-                for k, v in self.data_arrays.items()
-            },
-            coords=self.coords,
-        )
-        dims = list(reversed([c for c in dataset.coords if c != self.time_var]))
-
-        dataset = dataset.transpose(self.time_var, *dims)
-
-        dataset.to_netcdf(self._path, unlimited_dims=[self.time_var])
-        dataset.close()
+        self.dataset.close()
 
     def _data_changed(self, name, caller, time):
         if self.status in (
@@ -310,50 +281,80 @@ class NetCdfPushWriter(fm.Component):
 
         layer = self._input_dict[name]
         data = caller.pull_data(self.last_update)
-        new_var = data.magnitude
 
-        var = self.data_arrays[layer.var]
-        self.data_arrays[layer.var] = np.concatenate((var, new_var), axis=0)
+        self.dataset[layer.var][self.timestamp_counter, :, :] = data.magnitude
+        self.dataset[self.time_var][self.timestamp_counter] = date2num(
+            time, self.dataset[self.time_var].units
+        )
 
         self.update()
 
 
-def _extract_vars_dims(in_infos, in_data, layers):
-    variables = {}
-    max_dims = 3
-    dims = [{}, {}, {}]
-
-    for name, data in in_data.items():
+def _create_nc_framework(
+    dataset, time_var, start_date, time_freq, in_infos, in_data, layers
+):
+    """
+    Creates coords, eg. (x, y), an empty time, and all other parameter variables, eg. temperature.
+    """
+    all_layers = []
+    all_var = []
+    equal_layers = True
+    for name in in_data:
         layer = layers[name]
+        if layer.var in all_var:
+            raise ValueError(f"Duplicated variable {layer.var}.")
+        else:
+            all_layers.append(layer.xyz)
+            all_var.append(layer.var)
 
-        if layer.var in variables:
-            raise ValueError(f"Duplicate variable {layer.var}.")
+    current_layer = all_layers[0]
+    for lays in all_layers:
+        if current_layer != lays:
+            equal_layers = False
+            break
+    if not equal_layers:
+        raise ValueError(
+            f"NetCdfTimedWriter Inputs {all_var} have different layers: {all_layers}."
+        )
 
-        grid_info = in_infos[name].grid
-        variables[layer.var] = layer, data.dtype
+    # creating time dim and var
+    dim = dataset.createDimension(time_var, None)
+    var = dataset.createVariable(time_var, np.float64, (time_var,))
 
-        for i, ax in enumerate(layer.xyz):
-            if ax not in grid_info.axes_names:
-                raise ValueError(
-                    f"Dimension {i} '{ax}' is not in the data for input {name}. "
-                    f"Available axes are {grid_info.axes_names}"
-                )
-            for j in range(max_dims):
-                if i != j and ax in dims[j]:
+    def days_hours_minutes(td):
+        """funtion to get units of time in days, hours, minutes or seconds as str"""
+        if td.days != 0:
+            return "days"
+        elif td.seconds // 3600 != 0:
+            return "hours"
+        elif (td.seconds // 60) % 60 != 0:
+            return "minutes"
+        else:
+            return "seconds"
+
+    freq = days_hours_minutes(time_freq)
+    var.units = freq + " since " + str(start_date)
+    var.calendar = "standard"  # standard may not be always the case
+
+    just_once = True
+    for name in in_data:
+        # creating lat-lon var and dim just once in a while loop
+        while just_once:
+            grid_info = in_infos[name].grid
+            for i, ax in enumerate(layer.xyz):
+                if ax not in grid_info.axes_names:
                     raise ValueError(
-                        f"Dimension {i} '{ax}' is already defined. "
-                        f"Definition differs from data provided by input {name}"
+                        f"Dimension {i} '{ax}' is not in the data for input {name}. "
+                        f"Available axes are {grid_info.axes_names}"
                     )
-            curr_dim = dims[i]
-            axis_values = in_infos[name].grid.data_axes[i]
-            if ax in curr_dim:
-                axis = curr_dim[ax]
-                if not np.allclose(axis_values, axis):
-                    raise ValueError(
-                        f"Dimension {i} '{ax}' is already defined. "
-                        f"Definition differs from data provided by input {name}"
-                    )
-            else:
-                curr_dim[ax] = axis_values
+                axis_values = in_infos[name].grid.data_axes[i]
+                axis_type = in_infos[name].grid.data_axes[i].dtype
+                dim = dataset.createDimension(ax, len(axis_values))
+                var = dataset.createVariable(ax, axis_type, (ax,))
+                dataset[ax][:] = axis_values
+            just_once = False
 
-    return variables, dict(dict(**dims[0], **dims[1], **dims[2]))
+        # creating var and dim other than time and coords X,Y
+        dim = (time_var, current_layer[0], current_layer[1])
+        var = dataset.createVariable(name, np.float64, dim)
+        var.units = str(in_data[name].units)
