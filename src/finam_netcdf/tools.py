@@ -1,9 +1,6 @@
 """NetCDF helper classes and functions"""
-import copy
-
 import finam as fm
 import numpy as np
-import pandas as pd
 from netCDF4 import num2date
 
 
@@ -38,7 +35,6 @@ def extract_layers(dataset):
     """
     Extracts layer information from a dataset
     """
-    # needed variables  
     layers = []
     var_list = []
     time_var = None
@@ -66,7 +62,7 @@ def extract_layers(dataset):
                 if "calendar" in data.ncattrs():
                     time_var = _check_var(time_var, data.name)
 
-    # creating coords tuple
+    # creating tuple X Y coords
     xyz = tuple(v for v in [x_var, y_var, z_var] if v is not None)
     # appending to layers
     for var in var_list:
@@ -91,23 +87,23 @@ def extract_grid(dataset, layer, time_index=None):
     layer : Layer
         The layer definition
     time_index : int, optional
-        time_index indice of a variable 
+        time_index indice of a variable
     """
     var_data = dataset[layer.var]
+    # # var_data.dimensions is at least always (time, x ,y) - could be:('time', 'lev', 'lat', 'lon')
+    # if len(var_data.dimensions) > 3: 
+    #     raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
+    # if len(var_data.dimensions) != len(layer.xyz):  # len(layer.xyz) will get just lat and lon, but len(var_data.dimensions) could have more
+    #     raise ValueError(
+    #         f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
+    #     )
 
-    if len(var_data.dimensions) > 3:
-        raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
-    if len(var_data.dimensions) != len(layer.xyz):
-        raise ValueError(
-            f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
-        )
-    
     for ax in layer.xyz:
         if ax not in var_data.dimensions:
             raise ValueError(
                 f"Dimension {ax} not available for NetCDF variable {layer.var}"
             )
-    
+
     meta = {}
     for name in var_data.ncattrs():
         meta[name] = getattr(var_data, name)
@@ -120,7 +116,7 @@ def extract_grid(dataset, layer, time_index=None):
 
     # getting coordinates data
     xyz_data = [dataset.variables[ax] for ax in layer.xyz]
-    axes = np.array([  np.array(ax[:]) for ax in xyz_data ], dtype=object)
+    axes = np.array([np.array(ax[:]) for ax in xyz_data], dtype=object)
 
     # calculate properties of uniform grids
     spacing = fm.data.check_axes_uniformity(axes)
@@ -146,19 +142,19 @@ def extract_grid(dataset, layer, time_index=None):
     # creating the time dimension
     times = None
     if not layer.static and "time" in dataset.dimensions:
-        nctime = dataset["time"][:]
+        nctime = dataset["time"][time_index]
         time_cal = dataset["time"].calendar
         time_unit = dataset.variables["time"].units
         times = num2date(
             nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
         )
         times = np.array(times).astype("datetime64[ns]")
-        times = pd.DataFrame(times, columns=['time'])
-        times = fm.data.to_datetime(times)
+        times = times.astype("datetime64[s]").tolist()
 
     info = fm.Info(time=times, grid=grid, meta=meta)
 
     return info, fm.UNITS.Quantity(var_data, info.units)
+
 
 def create_point_axis(cell_axis):
     """Create a point axis from a cell axis"""
