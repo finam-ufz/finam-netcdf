@@ -84,7 +84,7 @@ class NetCdfStaticReader(fm.Component):
         if self.data is None:
             self.data = {}
             for name, pars in self.output_vars.items():
-                info, data= extract_grid(self.dataset, pars, pars.fixed)
+                info, data = extract_grid(self.dataset, pars, pars.fixed)
                 data.name = name
                 self.data[name] = (info, data)
 
@@ -222,14 +222,13 @@ class NetCdfReader(fm.TimeComponent):
         nctime = self.dataset[self.time_var][:]
         time_cal = self.dataset[self.time_var].calendar
         time_unit = self.dataset.variables[self.time_var].units
-
         # convert time fom cftime.real_datetime to datetime format
         times = num2date(
             nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
         )
         times = np.array(times).astype("datetime64[ns]")
-        times = pd.DataFrame(times, columns=['time'])
-        times = times['time'].dt
+        times = pd.DataFrame(times, columns=["time"])
+        times = times["time"].dt
 
         if self.time_limits is None:
             self.time_indices = list(range(times.date.shape[0]))
@@ -243,7 +242,6 @@ class NetCdfReader(fm.TimeComponent):
                     self.time_indices.append(i)
 
         self.times = [datetime.combine(d, t) for d, t in zip(times.date, times.time)]
-
         for i in range(len(self.times) - 1):
             if self.times[i] >= self.times[i + 1]:
                 raise ValueError(
@@ -258,11 +256,7 @@ class NetCdfReader(fm.TimeComponent):
             self._time, self.time_index = self.time_callback(self.step, None, None)
 
         for name, pars in self.output_vars.items():
-            time_index = (
-                None
-                if pars.static
-                else self.time_indices[self.time_index]
-            )
+            time_index = None if pars.static else self.time_indices[self.time_index]
 
             info, data = extract_grid(
                 self.dataset,
