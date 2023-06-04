@@ -33,7 +33,7 @@ class Layer:
 
 def extract_layers(dataset):
     """
-    Extracts layer information from a dataset
+    Extracts the layer information from a dataset following CF convention
     """
     layers = []
     var_list = []
@@ -41,40 +41,126 @@ def extract_layers(dataset):
     x_var = None
     y_var = None
     z_var = None
+    ATTRS = {
+        "time": {
+            "axis": "T",
+            "units": "since",
+            "standard_name": "time",
+            "long_name": "time",
+        },
+        "longitude": {
+            "axis": "X",
+            "units": [
+                "degrees_east",
+                "degree_east",
+                "degree_E",
+                "degrees_E",
+                "degreeE",
+                "degreesE",
+            ],
+            "standard_name": ["longitude", "lon", "degrees_east", "xc"],
+            "long_name": ["longitude", "lon", "degrees_east", "xc"],
+        },
+        "latitude": {
+            "axis": "Y",
+            "units": [
+                "degrees_north",
+                "degree_north",
+                "degree_N",
+                "degrees_N",
+                "degreeN",
+                "degreesN",
+            ],
+            "standard_name": ["latitude", "lat", "degrees_north", "yc"],
+            "long_name": ["latitude", "lat", "degrees_north", "yc"],
+        },
+        "Z": {
+            "axis": "Z",
+            "standard_name": [
+                "level",
+                "pressure level",
+                "depth",
+                "height",
+                "vertical level",
+                "elevation",
+                "altitude",
+            ],
+            "long_name": [
+                "level",
+                "pressure level",
+                "depth",
+                "height",
+                "vertical level",
+                "elevation",
+                "altitude",
+            ],
+        },
+    }
 
     for var, data in dataset.variables.items():
-        # getting measured variables with at least time,lon,lat info
+        if len(data.dimensions) > 4:
+            raise ValueError(f"Variable {data.name} has more than 4 possible dimensions (T, Z, Y, X).")
+        
+        # getting parameter variables
         if len(data.dimensions) > 2:
             var_list.append(data.name)
-        # assigning axis
         else:
-            if "axis" in data.ncattrs():
-                ax = data.axis
-                if ax == "T":
-                    time_var = _check_var(time_var, data.name)
-                elif ax == "X":
-                    x_var = _check_var(x_var, data.name)
-                elif ax == "Y":
-                    y_var = _check_var(y_var, data.name)
-                elif ax == "Z":
-                    z_var = _check_var(z_var, data.name)
-            else:
+            # getting dimensions (T, Z, X, Y)
+            if var in dataset.dimensions.keys():
                 if "calendar" in data.ncattrs():
-                    time_var = _check_var(time_var, data.name)
+                    time_var = _check_var(time_var, data.name, check_var=True)
 
-    # creating tuple X Y coords
-    xyz = tuple(v for v in [x_var, y_var, z_var] if v is not None)
-    # appending to layers
+                elif "positive" in data.ncattrs():
+                    z_var = _check_var(z_var, data.name, check_var=True)
+                else:
+                    time_var, check_var = _check_var_attr(time_var, data, var, ATTRS["time"])
+                    time_var = _check_var(time_var, data.name, check_var)
+
+                    z_var, check_var = _check_var_attr(z_var, data, var, ATTRS["Z"])
+                    z_var = _check_var(z_var, data.name, check_var)
+
+                    x_var, check_var = _check_var_attr(x_var, data, var, ATTRS["longitude"])
+                    x_var = _check_var(x_var, data.name, check_var)
+
+                    y_var, check_var = _check_var_attr(y_var, data, var, ATTRS["latitude"])
+                    y_var = _check_var(y_var, data.name, check_var)
+                    
+    xyz = tuple(v for v in [x_var, y_var] if v is not None)
+
+    if len(xyz) < 2:
+        raise ValueError(f"CF conventions not met or coordinates missing. Input (X,Y) NetCDF coordinates: {xyz}.")
+        
     for var in var_list:
-        layers.append(Layer(var, xyz, static=time_var is None))
+        if dataset[var].dimensions == 4:
+            if z_var == None:
+                raise ValueError(f"Input NetCDF coordinate Z does not comply with CF conventions!")
+            else:
+                layers.append(Layer(var, xyz, fixed={z_var: 0}, static=time_var is None))
+        else:
+            layers.append(Layer(var, xyz, static=time_var is None))
 
     return time_var, layers
 
 
-def _check_var(old, new):
-    if old is None or old == new:
-        return new
-    raise ValueError(f"Axis already defined as {old}. Found second axis {new}.")
+def _check_var(old, new, check_var):
+    if check_var == True:
+        if old is None or old == new:
+            return new
+        raise ValueError(f"Axis already defined as {old}. Found second axis {new}.")
+    else:
+        return old
+
+
+def _check_var_attr(variable, data, name, attributes):
+    if variable is not None:
+        return variable, False
+    else:
+        for attribute_name, attribute_values in attributes.items():
+            if attribute_name in data.ncattrs():
+                attribute_value = getattr(data, attribute_name)
+                if attribute_value in attribute_values:
+                    return name, True
+        return None, False
 
 
 def extract_grid(dataset, layer, time_index=None):
@@ -91,7 +177,7 @@ def extract_grid(dataset, layer, time_index=None):
     """
     var_data = dataset[layer.var]
     # # var_data.dimensions is at least always (time, x ,y) - could be:('time', 'lev', 'lat', 'lon')
-    # if len(var_data.dimensions) > 3: 
+    # if len(var_data.dimensions) > 3:
     #     raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
     # if len(var_data.dimensions) != len(layer.xyz):  # len(layer.xyz) will get just lat and lon, but len(var_data.dimensions) could have more
     #     raise ValueError(
