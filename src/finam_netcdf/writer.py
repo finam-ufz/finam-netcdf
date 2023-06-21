@@ -8,7 +8,6 @@ from functools import partial
 
 import finam as fm
 import numpy as np
-
 from netCDF4 import Dataset, date2num
 
 from .tools import Layer
@@ -154,7 +153,9 @@ class NetCdfPushWriter(fm.Component):
                 "LAI": Layer(var="lai", xyz=("lon", "lat")),
                 "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
             },
-            time_var="time"
+            time_var="time",
+            start=datetime(2000, 1, 1),
+            step=timedelta(days=1),
        )
 
     .. testcode:: constructor
@@ -180,6 +181,8 @@ class NetCdfPushWriter(fm.Component):
         path: str,
         inputs: dict[str, Layer],
         time_var: str,
+        start: datetime,
+        step: timedelta,
     ):
         super().__init__()
 
@@ -189,6 +192,8 @@ class NetCdfPushWriter(fm.Component):
         self.time_var = time_var
         self.dataset = None
         self.timestamp_counter = 0
+        self._step = step
+        self._time = start
 
         self.last_update = None
         self.timestamps = []
@@ -239,15 +244,7 @@ class NetCdfPushWriter(fm.Component):
         pass
 
     def _update(self):
-        self._time += self._step
-        self.timestamp_counter += 1
-        for name, inp in self.inputs.items():
-            self.dataset[name][self.timestamp_counter, :, :] = inp.pull_data(
-                self._time
-            ).magnitude
-            self.dataset[self.time_var][self.timestamp_counter] = date2num(
-                self._time, self.dataset[self.time_var].units
-            )
+        pass
 
     def _finalize(self):
         self.dataset.close()
@@ -259,8 +256,8 @@ class NetCdfPushWriter(fm.Component):
             fm.ComponentStatus.CONNECTING_IDLE,
         ):
             self.last_update = time
-            if len(self.timestamps) == 0:
-                self.timestamps.append(time)
+            if self.timestamp_counter == 0:
+                self.timestamp_counter += 1
 
             return
 
@@ -270,19 +267,19 @@ class NetCdfPushWriter(fm.Component):
         if self.status == fm.ComponentStatus.INITIALIZED:
             self.last_update = time
             return
-        if time != self.last_update:
-            lengths = [a.shape[0] for a in self.data_arrays.values()]
-            if lengths.count(lengths[0]) != len(lengths):
-                raise ValueError(f"Incomplete dataset for time {self.last_update}")
+        # if time != self.last_update:
+        #     lengths = [a.shape[0] for a in self.data_arrays.values()]
+        #     if lengths.count(lengths[0]) != len(lengths):
+        #         raise ValueError(f"Incomplete dataset for time {self.last_update}")
 
-            self.timestamps.append(time)
+        #     self.timestamps.append(time)
 
         self.last_update = time
 
         layer = self._input_dict[name]
         data = caller.pull_data(self.last_update)
 
-        self.dataset[layer.var][self.timestamp_counter, :, :] = data.magnitude
+        self.dataset[layer.var][self.timestamp_counter, :, :] = data
         self.dataset[self.time_var][self.timestamp_counter] = date2num(
             time, self.dataset[self.time_var].units
         )
@@ -294,7 +291,7 @@ def _create_nc_framework(
     dataset, time_var, start_date, time_freq, in_infos, in_data, layers
 ):
     """
-    Creates coords, eg. (x, y), an empty time, and all other parameter variables, eg. temperature.
+    Creates coords, eg. (x, y), an empty time to be filled, and all other parameter variables, eg. temperature.
     """
     all_layers = []
     all_var = []
@@ -336,9 +333,9 @@ def _create_nc_framework(
     var.units = freq + " since " + str(start_date)
     var.calendar = "standard"  # standard may not be always the case
 
+    # creating lon lat dim and var
     just_once = True
     for name in in_data:
-        # creating lat-lon var and dim just once in a while loop
         while just_once:
             grid_info = in_infos[name].grid
             for i, ax in enumerate(layer.xyz):

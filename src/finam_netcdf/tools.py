@@ -1,8 +1,103 @@
 """NetCDF helper classes and functions"""
 import finam as fm
 import numpy as np
+import warnings
 from netCDF4 import num2date
 
+ATTRS = {
+        "time": {
+            "axis": ("T",),
+            "units": ("since",),
+            "calendar": (
+                "proleptic_gregorian",
+                "gregorian"
+                "julian",
+                "standard",
+                "noleap",
+                "365_day",
+                "all_leap",
+                "366_day",
+                "360_day",
+                "none",
+            ),
+            "standard_name": ("time",),
+            "long_name": ("time",),
+            "_CoordinateAxisType": ("Time",),
+            "cartesian_axis": ("T",),
+            "grads_dim": ("t",),
+        },
+        "longitude": {
+            "axis": "X",
+            "units": (
+                "degrees_east",
+                "degree_east",
+                "degree_E",
+                "degrees_E",
+                "degreeE",
+                "degreesE",
+            ),
+            "standard_name": ("longitude",),
+            "long_name": ("longitude",),
+            "_CoordinateAxisType": ("Lon",),
+        },
+        "latitude": {
+            "axis": ("Y",),
+            "units": (
+                "degrees_north",
+                "degree_north",
+                "degree_N",
+                "degrees_N",
+                "degreeN",
+                "degreesN",
+            ),
+            "standard_name": ("latitude",),
+            "long_name": ("latitude",),
+            "_CoordinateAxisType": ("Lat",),
+        },
+        "Z": {
+            "axis": ("Z",),
+            "standard_name": (
+                "level",
+                "pressure level",
+                "depth",
+                "height",
+                "vertical level",
+                "elevation",
+                "altitude",
+            ),
+            "long_name": (
+                "level",
+                "pressure level",
+                "depth",
+                "height",
+                "vertical level",
+                "elevation",
+                "altitude",
+            ),
+            "positive": ("up", "down"),
+                "_CoordinateAxisType": (
+                "GeoZ",
+                "Height",
+                "Pressure",
+            ),
+            "cartesian_axis": ("Z",),
+            "grads_dim": ("z",),
+        },
+        "X": {
+            "standard_name": ("projection_x_coordinate",),
+            "_CoordinateAxisType": ("GeoX",),
+            "axis": ("X",),
+            "cartesian_axis": ("X",),
+            "grads_dim": ("x",),
+        },
+        "Y": {
+            "standard_name": "projection_y_coordinate",
+            "_CoordinateAxisType": ("GeoY",),
+            "axis": ("Y",),
+            "cartesian_axis": ("Y",),
+            "grads_dim": ("y",),
+        },
+    }
 
 class Layer:
     """
@@ -41,66 +136,14 @@ def extract_layers(dataset):
     x_var = None
     y_var = None
     z_var = None
-    ATTRS = {
-        "time": {
-            "axis": "T",
-            "units": "since",
-            "standard_name": "time",
-            "long_name": "time",
-        },
-        "longitude": {
-            "axis": "X",
-            "units": [
-                "degrees_east",
-                "degree_east",
-                "degree_E",
-                "degrees_E",
-                "degreeE",
-                "degreesE",
-            ],
-            "standard_name": ["longitude", "lon", "degrees_east", "xc"],
-            "long_name": ["longitude", "lon", "degrees_east", "xc"],
-        },
-        "latitude": {
-            "axis": "Y",
-            "units": [
-                "degrees_north",
-                "degree_north",
-                "degree_N",
-                "degrees_N",
-                "degreeN",
-                "degreesN",
-            ],
-            "standard_name": ["latitude", "lat", "degrees_north", "yc"],
-            "long_name": ["latitude", "lat", "degrees_north", "yc"],
-        },
-        "Z": {
-            "axis": "Z",
-            "standard_name": [
-                "level",
-                "pressure level",
-                "depth",
-                "height",
-                "vertical level",
-                "elevation",
-                "altitude",
-            ],
-            "long_name": [
-                "level",
-                "pressure level",
-                "depth",
-                "height",
-                "vertical level",
-                "elevation",
-                "altitude",
-            ],
-        },
-    }
+    
 
     for var, data in dataset.variables.items():
         if len(data.dimensions) > 4:
-            raise ValueError(f"Variable {data.name} has more than 4 possible dimensions (T, Z, Y, X).")
-        
+            raise ValueError(
+                f"Variable {data.name} has more than 4 possible dimensions (T, Z, Y, X)."
+            )
+
         # getting parameter variables
         if len(data.dimensions) > 2:
             var_list.append(data.name)
@@ -113,29 +156,41 @@ def extract_layers(dataset):
                 elif "positive" in data.ncattrs():
                     z_var = _check_var(z_var, data.name, check_var=True)
                 else:
-                    time_var, check_var = _check_var_attr(time_var, data, var, ATTRS["time"])
+                    time_var, check_var = _check_var_attr(
+                        time_var, data, var, ATTRS["time"]
+                    )
                     time_var = _check_var(time_var, data.name, check_var)
 
                     z_var, check_var = _check_var_attr(z_var, data, var, ATTRS["Z"])
                     z_var = _check_var(z_var, data.name, check_var)
 
-                    x_var, check_var = _check_var_attr(x_var, data, var, ATTRS["longitude"])
+                    x_var, check_var = _check_var_attr(
+                        x_var, data, var, ATTRS["longitude"]
+                    )
                     x_var = _check_var(x_var, data.name, check_var)
 
-                    y_var, check_var = _check_var_attr(y_var, data, var, ATTRS["latitude"])
+                    y_var, check_var = _check_var_attr(
+                        y_var, data, var, ATTRS["latitude"]
+                    )
                     y_var = _check_var(y_var, data.name, check_var)
-                    
+
     xyz = tuple(v for v in [x_var, y_var] if v is not None)
 
     if len(xyz) < 2:
-        raise ValueError(f"CF conventions not met or coordinates missing. Input (X,Y) NetCDF coordinates: {xyz}.")
-        
+        raise ValueError(
+            f"CF conventions not met or coordinates missing. Input (X,Y) NetCDF coordinates: {xyz}."
+        )
+
     for var in var_list:
         if dataset[var].dimensions == 4:
             if z_var == None:
-                raise ValueError(f"Input NetCDF coordinate Z does not comply with CF conventions!")
+                raise ValueError(
+                    f"Input NetCDF coordinate Z does not comply with CF conventions!"
+                )
             else:
-                layers.append(Layer(var, xyz, fixed={z_var: 0}, static=time_var is None))
+                layers.append(
+                    Layer(var, xyz, fixed={z_var: 0}, static=time_var is None)
+                )
         else:
             layers.append(Layer(var, xyz, static=time_var is None))
 
