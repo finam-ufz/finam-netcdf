@@ -7,7 +7,7 @@ from datetime import datetime
 
 import finam as fm
 from netCDF4 import Dataset
-from tools import Layer, create_time_dim, extract_grid, extract_layers
+from .tools import Layer, create_time_dim, extract_grid, extract_layers
 
 
 class NetCdfStaticReader(fm.Component):
