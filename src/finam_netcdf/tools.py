@@ -1,7 +1,7 @@
 """NetCDF helper classes and functions"""
 import finam as fm
 import numpy as np
-from netcdf_info import DatasetInfo, check_order_reversed
+from .info_checker import DatasetInfo, check_order_reversed
 from netCDF4 import num2date
 
 
@@ -103,6 +103,8 @@ def extract_grid(dataset, layer, time_var, time_index=None, current_time=None):
     data_info = DatasetInfo(dataset)
     order = data_info.get_axes_order(layer.xyz)
     axes_reversed = check_order_reversed(order)
+    if axes_reversed == True:
+        layer.xyz =  layer.xyz[::-1] # ordering layer.xyz
 
     # getting coordinates data
     axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]
