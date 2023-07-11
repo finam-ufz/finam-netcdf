@@ -7,8 +7,7 @@ from datetime import datetime
 
 import finam as fm
 from netCDF4 import Dataset
-
-from .tools import Layer, create_time_dim, extract_grid, extract_layers
+from tools import Layer, create_time_dim, extract_grid, extract_layers
 
 
 class NetCdfStaticReader(fm.Component):
@@ -51,7 +50,6 @@ class NetCdfStaticReader(fm.Component):
         super().__init__()
         self.path = path
         self.output_vars = outputs
-        self.z_var = None
         self.dataset = None
         self.data = None
         self.status = fm.ComponentStatus.CREATED
@@ -60,7 +58,7 @@ class NetCdfStaticReader(fm.Component):
         self.dataset = Dataset(self.path)
 
         if self.output_vars is None:
-            self.time_var, self.z_var, layers = extract_layers(self.dataset)
+            self.time_var, layers = extract_layers(self.dataset)
             self.output_vars = {}
             for l in layers:
                 if l.static:
@@ -83,7 +81,7 @@ class NetCdfStaticReader(fm.Component):
             self.data = {}
             for name, pars in self.output_vars.items():
                 info, data = extract_grid(
-                    self.dataset, pars, self.time_var, self.z_var, pars.fixed
+                    self.dataset, pars, self.time_var, pars.fixed
                 )
                 data.name = name
                 self.data[name] = (info, data)
@@ -177,7 +175,6 @@ class NetCdfReader(fm.TimeComponent):
         self.dataset = None
         self.data = None
         self.times = None
-        self.z_var = None
         self.time_index = None
         self.time_indices = None
         self.step = 0
@@ -192,7 +189,7 @@ class NetCdfReader(fm.TimeComponent):
     def _initialize(self):
         self.dataset = Dataset(self.path)
         if self.output_vars is None:
-            self.time_var, self.z_var, layers = extract_layers(self.dataset)
+            self.time_var, layers = extract_layers(self.dataset)
             self.output_vars = {l.var: l for l in layers}
 
         for o, layer in self.output_vars.items():
@@ -217,7 +214,6 @@ class NetCdfReader(fm.TimeComponent):
             del self.data
 
     def _process_initial_data(self):
-
         self.data = {}
         self.times = create_time_dim(self.dataset, self.time_var)
 
@@ -252,7 +248,6 @@ class NetCdfReader(fm.TimeComponent):
                 self.dataset,
                 pars,
                 self.time_var,
-                self.z_var,
                 time_index,
                 self._time,
             )
@@ -286,7 +281,6 @@ class NetCdfReader(fm.TimeComponent):
                 self.dataset,
                 pars,
                 self.time_var,
-                self.z_var,
                 self.time_indices[self.time_index],
                 self._time,
             )
