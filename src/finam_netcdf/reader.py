@@ -7,6 +7,7 @@ from datetime import datetime
 
 import finam as fm
 from netCDF4 import Dataset
+
 from .tools import Layer, create_time_dim, extract_grid, extract_layers
 
 
@@ -80,9 +81,7 @@ class NetCdfStaticReader(fm.Component):
         if self.data is None:
             self.data = {}
             for name, pars in self.output_vars.items():
-                info, data = extract_grid(
-                    self.dataset, pars, self.time_var, pars.fixed
-                )
+                info, data = extract_grid(self.dataset, pars, pars.fixed, self.time_var)
                 data.name = name
                 self.data[name] = (info, data)
 
@@ -247,8 +246,8 @@ class NetCdfReader(fm.TimeComponent):
             info, data = extract_grid(
                 self.dataset,
                 pars,
-                self.time_var,
                 time_index,
+                self.time_var,
                 self._time,
             )
             data.name = name
@@ -280,8 +279,8 @@ class NetCdfReader(fm.TimeComponent):
             info, data = extract_grid(
                 self.dataset,
                 pars,
-                self.time_var,
                 self.time_indices[self.time_index],
+                self.time_var,
                 self._time,
             )
             if self.time_callback is not None:

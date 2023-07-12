@@ -1,8 +1,9 @@
 """NetCDF helper classes and functions"""
 import finam as fm
 import numpy as np
-from .info_checker import DatasetInfo, check_order_reversed
 from netCDF4 import num2date
+
+from .info_checker import DatasetInfo, check_order_reversed
 
 
 class Layer:
@@ -50,15 +51,16 @@ def extract_layers(dataset):
 
     layers = []
 
-    variables = DatasetInfo(dataset).data_dims_map
-    time_var = DatasetInfo(dataset).time
+    data_info = DatasetInfo(dataset)
+    variables = data_info.data_dims_map
+    time_var = data_info.time
 
     if time_var == set():
         time_var = None
     else:
         time_var = time_var.pop()
 
-    # extracting names of coordinates XYZ in the original NetCDF
+    # extracting names of coordinates XYZ
     for var, dims in variables.items():
         if time_var in dims:
             xyz = tuple(value for value in dims if value not in time_var)
@@ -70,7 +72,7 @@ def extract_layers(dataset):
     return time_var, layers
 
 
-def extract_grid(dataset, layer, time_var, time_index=None, current_time=None):
+def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=None):
     """Extracts a 2D data array from a dataset
 
     Parameters
@@ -79,10 +81,10 @@ def extract_grid(dataset, layer, time_var, time_index=None, current_time=None):
         The input dataset
     layer : Layer
         The layer definition
-    time_var: str
-        Time variable string
     time_index : int, optional
         index of current time
+    time_var: str, optional
+        Time variable string
     current_time: datetime.datetime
         (YYYY, M, D, H, S)
     """
@@ -95,16 +97,16 @@ def extract_grid(dataset, layer, time_var, time_index=None, current_time=None):
         meta[name] = getattr(data_var, name)
 
     # gets the data for each time step as np.array if time is not None
-    if time_index != None:
+    if isinstance(time_index, int):
         data_var = data_var[time_index, ...]
         data_var = np.array(data_var.filled(np.nan))
 
-    # checks if order is xyz, if not transpose
+    # checks if order is xyz, if not swap
     data_info = DatasetInfo(dataset)
     order = data_info.get_axes_order(layer.xyz)
     axes_reversed = check_order_reversed(order)
-    if axes_reversed == True:
-        layer.xyz =  layer.xyz[::-1] # ordering layer.xyz
+    if axes_reversed:
+        layer.xyz = layer.xyz[::-1]
 
     # getting coordinates data
     axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]

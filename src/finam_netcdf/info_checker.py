@@ -307,7 +307,7 @@ class DatasetInfo:
 
 
 if __name__ == "__main__":
-    ds = Dataset("path/to/ncfile")
+    ds = Dataset("/Users/install/Downloads/temp.nc")
 
     info = DatasetInfo(ds)
     print(f"{info.dims=}")  # all dims
