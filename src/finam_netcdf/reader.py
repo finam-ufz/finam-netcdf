@@ -59,7 +59,7 @@ class NetCdfStaticReader(fm.Component):
         self.dataset = Dataset(self.path)
 
         if self.output_vars is None:
-            self.time_var, layers = extract_layers(self.dataset)
+            _time_var, layers = extract_layers(self.dataset)
             self.output_vars = {}
             for l in layers:
                 if l.static:
@@ -81,7 +81,7 @@ class NetCdfStaticReader(fm.Component):
         if self.data is None:
             self.data = {}
             for name, pars in self.output_vars.items():
-                info, data = extract_grid(self.dataset, pars, pars.fixed, self.time_var)
+                info, data = extract_grid(self.dataset, pars, pars.fixed)
                 data.name = name
                 self.data[name] = (info, data)
 
