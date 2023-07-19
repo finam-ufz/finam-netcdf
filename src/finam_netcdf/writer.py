@@ -110,13 +110,12 @@ class NetCdfTimedWriter(fm.TimeComponent):
         )
 
         # adding time and var data to the first timestamp
-        for name in self._input_dict:
-            self.dataset[name][self.timestamp_counter, :, :] = self.connector.in_data[
-                name
-            ].magnitude
-            self.dataset[self.time_var][self.timestamp_counter] = date2num(
-                self._time, self.dataset[self.time_var].units
-            )
+        for key_name in self._input_dict:
+            var_name = self._input_dict[key_name].var
+            data = self.connector.in_data[key_name].magnitude
+            self.dataset[var_name][self.timestamp_counter, :, :] = data
+            current_date = date2num(self._time, self.dataset[self.time_var].units)
+            self.dataset[self.time_var][self.timestamp_counter] = current_date
 
     def _validate(self):
         pass
@@ -124,13 +123,12 @@ class NetCdfTimedWriter(fm.TimeComponent):
     def _update(self):
         self._time += self._step
         self.timestamp_counter += 1
-        for name, inp in self.inputs.items():
-            self.dataset[name][self.timestamp_counter, :, :] = inp.pull_data(
-                self._time
-            ).magnitude
-            self.dataset[self.time_var][self.timestamp_counter] = date2num(
-                self._time, self.dataset[self.time_var].units
-            )
+        for key_name, inp in self.inputs.items():
+            var_name = self._input_dict[key_name].var
+            data = inp.pull_data(self._time).magnitude
+            self.dataset[var_name][self.timestamp_counter, :, :] = data
+            current_date = date2num(self._time, self.dataset[self.time_var].units)
+            self.dataset[self.time_var][self.timestamp_counter] = current_date
 
     def _finalize(self):
         self.dataset.close()
@@ -194,10 +192,7 @@ class NetCdfPushWriter(fm.Component):
         self.timestamp_counter = 0
         self._step = step
         self._time = start
-
         self.last_update = None
-        self.timestamps = []
-
         self._status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
@@ -232,13 +227,14 @@ class NetCdfPushWriter(fm.Component):
         )
 
         # adding time and var data to the first timestamp
-        for name in self._input_dict:
-            self.dataset[name][self.timestamp_counter, :, :] = self.connector.in_data[
-                name
-            ].magnitude
-            self.dataset[self.time_var][self.timestamp_counter] = date2num(
-                self._time, self.dataset[self.time_var].units
-            )
+        # TODO: self.timestamp_counter is increase to 1 in _data_changed & therefore the -1 here
+        # it seems that removing that statement gives the wrong time step from1 to 30, instead of 0 to 30.
+        for key_name in self._input_dict:
+            var_name = self._input_dict[key_name].var
+            data = self.connector.in_data[key_name].magnitude
+            self.dataset[var_name][self.timestamp_counter - 1, :, :] = data
+            current_date = date2num(self._time, self.dataset[self.time_var].units)
+            self.dataset[self.time_var][self.timestamp_counter - 1] = current_date
 
     def _validate(self):
         pass
@@ -258,7 +254,6 @@ class NetCdfPushWriter(fm.Component):
             self.last_update = time
             if self.timestamp_counter == 0:
                 self.timestamp_counter += 1
-
             return
 
         if not isinstance(time, datetime):
@@ -267,22 +262,17 @@ class NetCdfPushWriter(fm.Component):
         if self.status == fm.ComponentStatus.INITIALIZED:
             self.last_update = time
             return
-        # if time != self.last_update:
-        #     lengths = [a.shape[0] for a in self.data_arrays.values()]
-        #     if lengths.count(lengths[0]) != len(lengths):
-        #         raise ValueError(f"Incomplete dataset for time {self.last_update}")
-
-        #     self.timestamps.append(time)
-
-        self.last_update = time
-
+        
         layer = self._input_dict[name]
-        data = caller.pull_data(self.last_update)
 
-        self.dataset[layer.var][self.timestamp_counter, :, :] = data
-        self.dataset[self.time_var][self.timestamp_counter] = date2num(
-            time, self.dataset[self.time_var].units
-        )
+        if time != self.last_update:
+            data = caller.pull_data(self.last_update).magnitude
+            self.dataset[layer.var][self.timestamp_counter, :, :] = data
+            current_time = date2num(time, self.dataset[self.time_var].units)
+            self.dataset[self.time_var][self.timestamp_counter] = current_time
+            self.timestamp_counter += 1
+            
+        self.last_update = time
 
         self.update()
 
@@ -291,33 +281,58 @@ def _create_nc_framework(
     dataset, time_var, start_date, time_freq, in_infos, in_data, layers
 ):
     """
-    Creates coords, eg. (x, y), an empty time to be filled, and all other parameter variables, eg. temperature.
+    creates a NetCDF with XYZ coords data, and empties time dimension and parameter variables.
+
+        Parameters
+        ----------
+        dataset : netCDF4._netCDF4.Dataset
+            empty NetCDF file
+        time_var : str
+            name of the time variable
+        start_date : datetime.datetime
+            starting time
+        time_freq : datetime.datetime
+            time stepping
+        in_infos : dict
+            grid data and units for each output variable
+        in_data : dict
+            array data and units for each output variable
+        layers : dict
+            Layer information for each variable:
+            Layer(var=--, xyz=(--, --, --), fixed={--}, static=--)}
+
+
+        Raises
+        ------
+        ValueError
+            If there is a duplicated output parameter varaible.
+        ValueError
+            If the names of the XYZ coordinates do not match for all variables.
     """
-    all_layers = []
-    all_var = []
-    equal_layers = True
-    for name in in_data:
-        layer = layers[name]
-        if layer.var in all_var:
+    coordinates = []
+    variables = []
+    for parameter in in_data:
+        layer = layers[parameter]
+        if layer.var in variables:
             raise ValueError(f"Duplicated variable {layer.var}.")
         else:
-            all_layers.append(layer.xyz)
-            all_var.append(layer.var)
+            coordinates.append(layer.xyz)
+            variables.append(layer.var)
 
-    current_layer = all_layers[0]
-    for lays in all_layers:
-        if current_layer != lays:
+    equal_layers = True
+    for l in coordinates:
+        if coordinates[0] != l:
             equal_layers = False
             break
     if not equal_layers:
         raise ValueError(
-            f"NetCdfTimedWriter Inputs {all_var} have different layers: {all_layers}."
+            f"NetCdfTimedWriter Inputs {variables} have different layers: {coordinates}."
         )
 
-    # creating time dim and var
-    dim = dataset.createDimension(time_var, None)
-    var = dataset.createVariable(time_var, np.float64, (time_var,))
 
+    # creating time dim and var
+    dataset.createDimension(time_var, None)
+    t_var = dataset.createVariable(time_var, np.float64, (time_var,))
     def days_hours_minutes(td):
         """funtion to get units of time in days, hours, minutes or seconds as str"""
         if td.days != 0:
@@ -328,30 +343,30 @@ def _create_nc_framework(
             return "minutes"
         else:
             return "seconds"
-
     freq = days_hours_minutes(time_freq)
-    var.units = freq + " since " + str(start_date)
-    var.calendar = "standard"  # standard may not be always the case
+    t_var.units = freq + " since " + str(start_date)
+    t_var.calendar = "standard"  # TODO: standard may not be always the case. should be remove?    
 
-    # creating lon lat dim and var
-    just_once = True
-    for name in in_data:
-        while just_once:
-            grid_info = in_infos[name].grid
-            for i, ax in enumerate(layer.xyz):
-                if ax not in grid_info.axes_names:
-                    raise ValueError(
-                        f"Dimension {i} '{ax}' is not in the data for input {name}. "
-                        f"Available axes are {grid_info.axes_names}"
-                    )
-                axis_values = in_infos[name].grid.data_axes[i]
-                axis_type = in_infos[name].grid.data_axes[i].dtype
-                dim = dataset.createDimension(ax, len(axis_values))
-                var = dataset.createVariable(ax, axis_type, (ax,))
-                dataset[ax][:] = axis_values
-            just_once = False
 
-        # creating var and dim other than time and coords X,Y
-        dim = (time_var, current_layer[0], current_layer[1])
-        var = dataset.createVariable(name, np.float64, dim)
-        var.units = str(in_data[name].units)
+    # creating xyz dim and var | all var have the same xyz coords data
+    name = next(iter(in_infos)) # gets the first key of in_infos dict.
+    grid_info = in_infos[name].grid
+    for i, ax in enumerate(layer.xyz):
+        if ax not in grid_info.axes_names:
+            raise ValueError(
+                f"Dimension {i} '{ax}' is not in the data for input {name}. "
+                f"Available axes are {grid_info.axes_names}"
+            )
+        axis_values = in_infos[name].grid.data_axes[i]
+        axis_type = in_infos[name].grid.data_axes[i].dtype
+        dataset.createDimension(ax, len(axis_values))
+        dataset.createVariable(ax, axis_type, (ax,))
+        dataset[ax][:] = axis_values
+    
+
+    # creating parameter variables
+    for parameter in in_data:
+        var_name = layers[parameter].var
+        dim = (time_var, ) + coordinates[0] # time plus existing coords
+        var = dataset.createVariable(var_name, np.float64, dim)
+        var.units = str(in_data[parameter].units) # unit come from pint implementation in FINAM

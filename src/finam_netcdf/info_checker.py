@@ -307,7 +307,8 @@ class DatasetInfo:
 
 
 if __name__ == "__main__":
-    ds = Dataset("/Users/install/Downloads/temp.nc")
+    # ds = Dataset("/path/to/your/NetCDF/file")
+    ds = Dataset("/path/to/your/NetCDF/file")
 
     info = DatasetInfo(ds)
     print(f"{info.dims=}")  # all dims
@@ -337,7 +338,7 @@ if __name__ == "__main__":
     print(f"{info.static_data=}")  # all static data
     print(f"{info.temporal_data=}")  # all temporal data
 
-    var = "YOUR VARIABLE"
+    var = "your NetCDF Varaible"
     order = info.get_axes_order(info.data_dims_map[var])
     print(var, order)
-    print("reversed", check_order_reversed(order))
+    print(f"reversed: {check_order_reversed(order)}")

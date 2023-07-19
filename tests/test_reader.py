@@ -12,7 +12,7 @@ class TestReader(unittest.TestCase):
         path = "tests/data/lai.nc"
         reader = NetCdfStaticReader(
             path,
-            {"LAI": Layer(var="lai", xyz=("lat", "lon"), fixed={"time": 0})},
+            {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
         )
         consumer = fm.modules.DebugConsumer(
             {"Input": fm.Info(time=None, grid=None, units=None)},
@@ -31,7 +31,7 @@ class TestReader(unittest.TestCase):
         path = "tests/data/temp.nc"
         reader = NetCdfStaticReader(
             path,
-            {"Lat": Layer(var="lat", xyz=("yc", "xc"))},
+            {"Lat": Layer(var="lat", xyz=("xc", "yc"))},
         )
         consumer = fm.modules.DebugConsumer(
             {"Input": fm.Info(time=None, grid=None, units=None)},
@@ -51,9 +51,9 @@ class TestReader(unittest.TestCase):
         reader = NetCdfReader(
             path,
             {
-                "LAI": Layer(var="lai", xyz=("lat", "lon")),
+                "LAI": Layer(var="lai", xyz=("lon", "lat")),
                 "LAI-stat": Layer(
-                    var="lai", xyz=("lat", "lon"), fixed={"time": 0}, static=True
+                    var="lai", xyz=("lon", "lat"), fixed={"time": 0}, static=True
                 ),
             },
             time_var="time",
@@ -112,8 +112,8 @@ class TestReader(unittest.TestCase):
         reader = NetCdfReader(
             path,
             {
-                "Tmin": Layer(var="tmin", xyz=("yc", "xc")),
-                "Lat": Layer(var="lat", xyz=("yc", "xc"), static=True),
+                "Tmin": Layer(var="tmin", xyz=("xc", "yc")),
+                "Lat": Layer(var="lat", xyz=("xc", "yc"), static=True),
             },
             time_var="time",
         )
@@ -137,7 +137,7 @@ class TestReader(unittest.TestCase):
         path = "tests/data/lai.nc"
         reader = NetCdfReader(
             path,
-            {"LAI": Layer(var="lai", xyz=("lat", "lon"))},
+            {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
             time_var="time",
             time_limits=(datetime(1901, 1, 1, 0, 8), None),
         )
@@ -162,7 +162,7 @@ class TestReader(unittest.TestCase):
         path = "tests/data/lai.nc"
         reader = NetCdfReader(
             path,
-            {"LAI": Layer(var="lai", xyz=("lat", "lon"))},
+            {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
             time_var="time",
             time_callback=lambda s, _t, _i: (start + s * step, s % 12),
         )

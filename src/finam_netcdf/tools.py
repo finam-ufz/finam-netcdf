@@ -55,19 +55,19 @@ def extract_layers(dataset):
     variables = data_info.data_dims_map
     time_var = data_info.time
 
-    if time_var == set():
-        time_var = None
-    else:
-        time_var = time_var.pop()
+    time_var = None if not time_var else time_var.pop()
 
     # extracting names of coordinates XYZ
     for var, dims in variables.items():
-        if time_var in dims:
-            xyz = tuple(value for value in dims if value not in time_var)
-            layers.append(Layer(var, xyz))
-        else:
-            xyz = dims
-            layers.append(Layer(var, xyz, static=True))
+        static = var in data_info.static_data
+        xyz = tuple(value for value in dims if value != time_var)
+
+        order = data_info.get_axes_order(xyz)
+        axes_reversed = check_order_reversed(order)
+        if axes_reversed:
+            xyz = xyz[::-1]
+
+        layers.append(Layer(var, xyz, static=static))
 
     return time_var, layers
 
@@ -89,6 +89,7 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
         (YYYY, M, D, H, S)
     """
 
+    data_info = DatasetInfo(dataset)
     data_var = dataset[layer.var]
 
     # storing attributes of data_var in meta dict
@@ -101,12 +102,9 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
         data_var = data_var[time_index, ...]
         data_var = np.array(data_var.filled(np.nan))
 
-    # checks if order is xyz, if not swap
-    data_info = DatasetInfo(dataset)
-    order = data_info.get_axes_order(layer.xyz)
+    # checks if axes were reversed or not
+    order = data_info.get_axes_order(data_info.data_dims_map[layer.var])
     axes_reversed = check_order_reversed(order)
-    if axes_reversed:
-        layer.xyz = layer.xyz[::-1]
 
     # getting coordinates data
     axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]
