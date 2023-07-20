@@ -1,7 +1,7 @@
 """NetCDF helper classes and functions"""
 import finam as fm
+import netCDF4 as nc
 import numpy as np
-from netCDF4 import num2date
 
 from .info_checker import DatasetInfo, check_order_reversed
 
@@ -170,7 +170,7 @@ def create_time_dim(dataset, time_var):
     nctime = dataset[time_var][:]
     time_cal = dataset[time_var].calendar
     time_unit = dataset.variables[time_var].units
-    times = num2date(
+    times = nc.num2date(
         nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
     )
     times = np.array(times).astype("datetime64[ns]")

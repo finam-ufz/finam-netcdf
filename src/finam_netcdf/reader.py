@@ -3,10 +3,8 @@ NetCDF reader components.
 """
 from __future__ import annotations
 
-from datetime import datetime
-
 import finam as fm
-from netCDF4 import Dataset
+import netCDF4 as nc
 
 from .tools import Layer, create_time_dim, extract_grid, extract_layers
 
@@ -56,7 +54,7 @@ class NetCdfStaticReader(fm.Component):
         self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
-        self.dataset = Dataset(self.path)
+        self.dataset = nc.Dataset(self.path)
 
         if self.output_vars is None:
             _time_var, layers = extract_layers(self.dataset)
@@ -186,7 +184,7 @@ class NetCdfReader(fm.TimeComponent):
         return None
 
     def _initialize(self):
-        self.dataset = Dataset(self.path)
+        self.dataset = nc.Dataset(self.path)
         if self.output_vars is None:
             self.time_var, layers = extract_layers(self.dataset)
             self.output_vars = {l.var: l for l in layers}
@@ -217,7 +215,7 @@ class NetCdfReader(fm.TimeComponent):
         self.times = create_time_dim(self.dataset, self.time_var)
 
         if self.time_limits is None:
-            self.time_indices = [x for x in range(len(self.times))]
+            self.time_indices = list(range(len(self.times)))
         else:
             self.time_indices = []
             mn = self.time_limits[0]

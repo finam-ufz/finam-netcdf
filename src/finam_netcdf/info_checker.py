@@ -1,6 +1,6 @@
 import fnmatch
 
-from netCDF4 import Dataset
+import netCDF4 as nc
 
 ATTRS = {
     "time": {
@@ -98,7 +98,7 @@ ATTRS = {
 }
 
 
-def find_axis(name, ds):
+def find_axis(name, dataset):
     """
     Find axis by CF-convention hints.
 
@@ -106,7 +106,7 @@ def find_axis(name, ds):
     ----------
     name : str
         Name of the axis to find ("time", "X", "Y", "Z", "latitude", "longitude")
-    ds : netCDF4.Dataset
+    dataset : netCDF4.Dataset
         The netcdf dataset to analyse.
 
     Returns
@@ -145,7 +145,7 @@ def find_axis(name, ds):
     # find all variables that match any rule
     axis = set()
     for att in att_rules:
-        ax_vars = ds.get_variables_by_attributes(**{att: create_checker(att)})
+        ax_vars = dataset.get_variables_by_attributes(**{att: create_checker(att)})
         axis = axis.union([v.name for v in ax_vars])
     return axis
 
@@ -184,7 +184,7 @@ class DatasetInfo:
 
     Parameters
     ----------
-    ds : netCDF4.Dataset
+    dataset : netCDF4.Dataset
         The netcdf dataset to analyse.
 
     Raises
@@ -193,53 +193,57 @@ class DatasetInfo:
         If multiple time dimensions are present.
     """
 
-    def __init__(self, ds):
+    def __init__(self, dataset):
         cname = "coordinates"
         bname = "bounds"
         # may includes dims for bounds
-        self.dims = set(ds.dimensions)
+        self.dims = set(dataset.dimensions)
         # coordinates are variables with same name as a dim
-        self.coords = set(ds.variables) & self.dims
-        self.coords_with_bounds = {c for c in self.coords if bname in ds[c].ncattrs()}
+        self.coords = set(dataset.variables) & self.dims
+        self.coords_with_bounds = {
+            c for c in self.coords if bname in dataset[c].ncattrs()
+        }
         # bound variables need to be treated separately
-        self.bounds = {ds[c].getncattr(bname) for c in self.coords_with_bounds}
-        self.bounds_map = {c: ds[c].getncattr(bname) for c in self.coords_with_bounds}
+        self.bounds = {dataset[c].getncattr(bname) for c in self.coords_with_bounds}
+        self.bounds_map = {
+            c: dataset[c].getncattr(bname) for c in self.coords_with_bounds
+        }
         # bnd specific dims are all dims from bounds that are not coords
-        dim_sets = [set()] + [set(ds[b].dimensions) for b in self.bounds]
+        dim_sets = [set()] + [set(dataset[b].dimensions) for b in self.bounds]
         self.bounds_dims = set.union(*dim_sets) - self.coords
         # remove bound specific dims from dims
         self.dims -= self.bounds_dims
         # all relevant data in the file
-        self.data = set(ds.variables) - self.bounds - self.coords
+        self.data = set(dataset.variables) - self.bounds - self.coords
         # all relevant data on spatial grids
         self.data_with_all_coords = {
-            d for d in self.data if set(ds[d].dimensions) <= self.coords
+            d for d in self.data if set(dataset[d].dimensions) <= self.coords
         }
         self.data_without_coords = {
-            d for d in self.data if not (set(ds[d].dimensions) & self.coords)
+            d for d in self.data if not (set(dataset[d].dimensions) & self.coords)
         }
-        self.data_dims_map = {d: ds[d].dimensions for d in self.data}
+        self.data_dims_map = {d: dataset[d].dimensions for d in self.data}
         # get auxiliary coordinates (given under coordinate attribute and are not dims)
-        self.data_with_aux = {d for d in self.data if cname in ds[d].ncattrs()}
+        self.data_with_aux = {d for d in self.data if cname in dataset[d].ncattrs()}
         type(self).aux_coords_map = {
-            d: ds[d].getncattr(cname).split(" ") for d in self.data_with_aux
+            d: dataset[d].getncattr(cname).split(" ") for d in self.data_with_aux
         }
         # needs at least one set for "union"
         aux_sets = [set()] + [set(aux) for _, aux in self.aux_coords_map.items()]
         # all auxiliary coordinates
         self.aux_coords = set.union(*aux_sets) - self.coords
         # find axis coordinates
-        self.time = find_axis("time", ds) & self.coords
-        self.x = find_axis("X", ds) & self.coords
-        self.y = find_axis("Y", ds) & self.coords
-        self.z = find_axis("Z", ds) & self.coords
+        self.time = find_axis("time", dataset) & self.coords
+        self.x = find_axis("X", dataset) & self.coords
+        self.y = find_axis("Y", dataset) & self.coords
+        self.z = find_axis("Z", dataset) & self.coords
         self.z_down = {}  # specify direction of z axis
         for z in self.z:
             self.z_down[z] = None  # None to indicate unknown
-            if "positive" in ds[z].ncattrs():
-                self.z_down[z] = ds[z].getncattr("positive") == "down"
-        self.lon = find_axis("longitude", ds)
-        self.lat = find_axis("latitude", ds)
+            if "positive" in dataset[z].ncattrs():
+                self.z_down[z] = dataset[z].getncattr("positive") == "down"
+        self.lon = find_axis("longitude", dataset)
+        self.lat = find_axis("latitude", dataset)
         self.x -= self.lon  # treat lon separatly from x-axis
         self.y -= self.lat  # treat lat separatly from y-axis
         # state if lat/lon are valid coord axis
@@ -256,7 +260,9 @@ class DatasetInfo:
         self.all_static = not bool(self.time)
         if not self.all_static:
             tname = next(iter(self.time))  # get time dim name
-            self.static_data = {d for d in self.data if tname not in ds[d].dimensions}
+            self.static_data = {
+                d for d in self.data if tname not in dataset[d].dimensions
+            }
         else:
             self.static_data = self.data
         self.temporal_data = self.data - self.static_data
@@ -307,10 +313,9 @@ class DatasetInfo:
 
 
 if __name__ == "__main__":
-    # ds = Dataset("/path/to/your/NetCDF/file")
-    ds = Dataset("/path/to/your/NetCDF/file")
+    dataset = nc.Dataset("/path/to/your/NetCDF/file.nc")
 
-    info = DatasetInfo(ds)
+    info = DatasetInfo(dataset)
     print(f"{info.dims=}")  # all dims
     print(f"{info.coords=}")  # all coordinates
     print(f"{info.coords_with_bounds=}")  # all coords with bounds
@@ -339,6 +344,6 @@ if __name__ == "__main__":
     print(f"{info.temporal_data=}")  # all temporal data
 
     var = "your NetCDF Varaible"
-    order = info.get_axes_order(info.data_dims_map[var])
-    print(var, order)
-    print(f"reversed: {check_order_reversed(order)}")
+    xyz_order = info.get_axes_order(info.data_dims_map[var])
+    print(var, xyz_order)
+    print(f"reversed: {check_order_reversed(xyz_order)}")
