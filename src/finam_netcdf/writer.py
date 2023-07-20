@@ -262,7 +262,7 @@ class NetCdfPushWriter(fm.Component):
         if self.status == fm.ComponentStatus.INITIALIZED:
             self.last_update = time
             return
-        
+
         layer = self._input_dict[name]
 
         if time != self.last_update:
@@ -271,7 +271,7 @@ class NetCdfPushWriter(fm.Component):
             current_time = date2num(time, self.dataset[self.time_var].units)
             self.dataset[self.time_var][self.timestamp_counter] = current_time
             self.timestamp_counter += 1
-            
+
         self.last_update = time
 
         self.update()
@@ -329,10 +329,10 @@ def _create_nc_framework(
             f"NetCdfTimedWriter Inputs {variables} have different layers: {coordinates}."
         )
 
-
     # creating time dim and var
     dataset.createDimension(time_var, None)
     t_var = dataset.createVariable(time_var, np.float64, (time_var,))
+
     def days_hours_minutes(td):
         """funtion to get units of time in days, hours, minutes or seconds as str"""
         if td.days != 0:
@@ -343,13 +343,15 @@ def _create_nc_framework(
             return "minutes"
         else:
             return "seconds"
+
     freq = days_hours_minutes(time_freq)
     t_var.units = freq + " since " + str(start_date)
-    t_var.calendar = "standard"  # TODO: standard may not be always the case. should be remove?    
-
+    t_var.calendar = (
+        "standard"  # TODO: standard may not be always the case. should be remove?
+    )
 
     # creating xyz dim and var | all var have the same xyz coords data
-    name = next(iter(in_infos)) # gets the first key of in_infos dict.
+    name = next(iter(in_infos))  # gets the first key of in_infos dict.
     grid_info = in_infos[name].grid
     for i, ax in enumerate(layer.xyz):
         if ax not in grid_info.axes_names:
@@ -362,11 +364,12 @@ def _create_nc_framework(
         dataset.createDimension(ax, len(axis_values))
         dataset.createVariable(ax, axis_type, (ax,))
         dataset[ax][:] = axis_values
-    
 
     # creating parameter variables
     for parameter in in_data:
         var_name = layers[parameter].var
-        dim = (time_var, ) + coordinates[0] # time plus existing coords
+        dim = (time_var,) + coordinates[0]  # time plus existing coords
         var = dataset.createVariable(var_name, np.float64, dim)
-        var.units = str(in_data[parameter].units) # unit come from pint implementation in FINAM
+        var.units = str(
+            in_data[parameter].units
+        )  # unit come from pint implementation in FINAM
