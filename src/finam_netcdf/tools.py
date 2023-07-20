@@ -110,36 +110,16 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
     axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]
     axes_attrs = [dataset.variables[ax].ncattrs() for ax in layer.xyz]
 
-    # check if axes increasing and flip inplace
-    axes_increase = fm.data.check_axes_monotonicity(axes)
-
-    # calculate properties of uniform grids
-    spacing = fm.data.check_axes_uniformity(axes)
-    is_uniform = not any(np.isnan(spacing))
-
     # note: we use point-associated data here.
-    if is_uniform:
-        origin = [ax[0] for ax in axes]
-        dims = [len(ax) + 1 for ax in axes]
-        grid = fm.UniformGrid(
-            dims,
-            axes_names=layer.xyz,
-            spacing=tuple(spacing),
-            origin=tuple(o - 0.5 * s for o, s in zip(origin, spacing)),
-            data_location=fm.Location.CELLS,
-            axes_reversed=axes_reversed,
-            axes_increase=axes_increase,
-            axes_attributes=axes_attrs,
-        )
-    else:
-        grid = fm.RectilinearGrid(
-            axes=[create_point_axis(ax) for ax in axes],
-            axes_names=layer.xyz,
-            data_location=fm.Location.CELLS,
-            axes_reversed=axes_reversed,
-            axes_increase=axes_increase,
-            axes_attributes=axes_attrs,
-        )
+    # ValueError("Only UniformGrid is supported in image plot.") 
+    # must be remove from finam_plot/image.py line 100
+    grid = fm.RectilinearGrid(
+        axes=[create_point_axis(ax) for ax in axes],
+        axes_names=layer.xyz,
+        data_location=fm.Location.CELLS,
+        axes_reversed=axes_reversed,
+        axes_attributes=axes_attrs,
+    )
 
     # getting current time
     times = None
