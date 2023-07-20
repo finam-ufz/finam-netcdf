@@ -333,6 +333,14 @@ def _create_nc_framework(
     dataset.createDimension(time_var, None)
     t_var = dataset.createVariable(time_var, np.float64, (time_var,))
 
+    # adding some general attributes
+    dataset.setncatts({
+        "original_source": "FINAM – Python model coupling framework",
+        "creator_url": "https://finam.pages.ufz.de",
+        "institution": "Helmholtz Centre for Environmental Research - UFZ (Helmholtz-Zentrum für Umweltforschung GmbH UFZ)",
+        "created_date": datetime.now().strftime("%d-%m-%Y"),
+    })
+
     def days_hours_minutes(td):
         """funtion to get units of time in days, hours, minutes or seconds as str"""
         if td.days != 0:
@@ -346,30 +354,29 @@ def _create_nc_framework(
 
     freq = days_hours_minutes(time_freq)
     t_var.units = freq + " since " + str(start_date)
-    t_var.calendar = (
-        "standard"  # TODO: standard may not be always the case. should be remove?
-    )
+    t_var.calendar = "standard"
 
     # creating xyz dim and var | all var have the same xyz coords data
     name = next(iter(in_infos))  # gets the first key of in_infos dict.
-    grid_info = in_infos[name].grid
+    grid_info = in_infos[name].gri
     for i, ax in enumerate(layer.xyz):
         if ax not in grid_info.axes_names:
             raise ValueError(
                 f"Dimension {i} '{ax}' is not in the data for input {name}. "
                 f"Available axes are {grid_info.axes_names}"
             )
-        axis_values = in_infos[name].grid.data_axes[i]
-        axis_type = in_infos[name].grid.data_axes[i].dtype
+        axis_values = grid_info.data_axes[i]
+        axis_type = grid_info.data_axes[i].dtype
         dataset.createDimension(ax, len(axis_values))
         dataset.createVariable(ax, axis_type, (ax,))
         dataset[ax][:] = axis_values
+        # adding axis names attributes| works since coords XYZ are ordered in FINAM reader
+        ax_name = {0: "X", 1: "Y", 2: "Z"}.get(i) 
+        dataset[ax].setncattr("axis", ax_name)
 
     # creating parameter variables
     for parameter in in_data:
         var_name = layers[parameter].var
         dim = (time_var,) + coordinates[0]  # time plus existing coords
         var = dataset.createVariable(var_name, np.float64, dim)
-        var.units = str(
-            in_data[parameter].units
-        )  # unit come from pint implementation in FINAM
+        var.units = str(in_data[parameter].units)
