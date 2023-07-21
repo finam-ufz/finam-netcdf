@@ -47,7 +47,6 @@ class TestWriter(unittest.TestCase):
                     "LAI2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
-                start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
 
@@ -103,7 +102,6 @@ class TestWriter(unittest.TestCase):
                     "LAI2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
-                start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
 
@@ -154,7 +152,6 @@ class TestWriter(unittest.TestCase):
                     "lai2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
-                start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
 

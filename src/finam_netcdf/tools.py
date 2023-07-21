@@ -61,7 +61,6 @@ def extract_layers(dataset):
     for var, dims in variables.items():
         static = var in data_info.static_data
         xyz = tuple(value for value in dims if value != time_var)
-
         order = data_info.get_axes_order(xyz)
         axes_reversed = check_order_reversed(order)
         if axes_reversed:
@@ -111,7 +110,7 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
     axes_attrs = [dataset.variables[ax].ncattrs() for ax in layer.xyz]
 
     # note: we use point-associated data here.
-    # ValueError("Only UniformGrid is supported in image plot.") 
+    # ValueError("Only UniformGrid is supported in image plot.")
     # must be remove from finam_plot/image.py line 100
     grid = fm.RectilinearGrid(
         axes=[create_point_axis(ax) for ax in axes],
