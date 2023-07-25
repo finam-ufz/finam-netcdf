@@ -1,6 +1,6 @@
 import unittest
 
-from finam import Composition, Info, Location, UniformGrid
+from finam import Location, RectilinearGrid
 from netCDF4 import Dataset
 from numpy.testing import assert_allclose
 
@@ -16,7 +16,7 @@ class TestTools(unittest.TestCase):
 
         info, data = extract_grid(dataset, layer, time_var)
 
-        self.assertTrue(isinstance(info.grid, UniformGrid))
+        self.assertTrue(isinstance(info.grid, RectilinearGrid))
         self.assertEqual(info.grid.data_location, Location.CELLS)
         self.assertEqual(
             info.grid.axes[0].shape[0], info.grid.data_axes[1].shape[0] + 1

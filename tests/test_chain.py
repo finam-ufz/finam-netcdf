@@ -38,8 +38,6 @@ class TestChain(unittest.TestCase):
                     "LAI": Layer(var="lai", xyz=("xc", "yc")),
                 },
                 time_var="time",
-                start=datetime(1990, 1, 1),
-                step=timedelta(days=1),
             )
             consumer = fm.modules.DebugPushConsumer(
                 inputs={

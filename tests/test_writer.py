@@ -4,10 +4,10 @@ from datetime import datetime, timedelta
 from os import path
 from tempfile import TemporaryDirectory
 
-import netCDF4 as nc
 import numpy as np
 from finam import Composition, Info, UniformGrid
 from finam.modules.generators import CallbackGenerator
+from netCDF4 import Dataset
 
 from finam_netcdf import NetCdfPushWriter, NetCdfTimedWriter
 from finam_netcdf.tools import Layer
@@ -40,6 +40,17 @@ class TestWriter(unittest.TestCase):
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
+
+            # creating global attrs to the NetCDF output file - optional
+            global_attrs = {
+                "project_name": "test_time_writer",
+                "original_source": "FINAM – Python model coupling framework",
+                "creator_url": "https://finam.pages.ufz.de",
+                "institution": "Helmholtz Centre for Environmental Research - UFZ (Helmholtz-Zentrum für Umweltforschung GmbH UFZ)",
+                "description": "FINAM test: test_time_writer",
+                "created_date": datetime.now().strftime("%d-%m-%Y"),
+            }
+
             writer = NetCdfTimedWriter(
                 path=file,
                 inputs={
@@ -48,6 +59,7 @@ class TestWriter(unittest.TestCase):
                 },
                 time_var="time",
                 step=timedelta(days=1),
+                global_attrs=global_attrs,
             )
 
             composition = Composition([source1, source2, writer])
@@ -59,7 +71,7 @@ class TestWriter(unittest.TestCase):
             composition.run(end_time=datetime(2000, 1, 31))
 
             self.assertTrue(os.path.isfile(file))
-            dataset = nc.Dataset(file)
+            dataset = Dataset(file)
 
             lai = dataset["lai"]
 
@@ -102,7 +114,6 @@ class TestWriter(unittest.TestCase):
                     "LAI2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
-                step=timedelta(days=1),
             )
 
             composition = Composition([source1, source2, writer])
@@ -115,14 +126,14 @@ class TestWriter(unittest.TestCase):
 
             self.assertTrue(os.path.isfile(file))
 
-            dataset = nc.Dataset(file)
+            dataset = Dataset(file)
             lai = dataset["lai"]
 
             self.assertEqual(lai.dimensions, ("time", "x", "y"))
 
             times = dataset["time"][:]
             self.assertEqual(times[0], 0.0)
-            self.assertEqual(times[-1], 30.0)
+            self.assertEqual(times[-1], 30.0 * 86400)
 
             dataset.close()
 
@@ -152,7 +163,6 @@ class TestWriter(unittest.TestCase):
                     "lai2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
-                step=timedelta(days=1),
             )
 
             composition = Composition([source1, source2, writer])
@@ -161,7 +171,5 @@ class TestWriter(unittest.TestCase):
             _ = source1.outputs["Grid"] >> writer.inputs["lai"]
             _ = source2.outputs["Grid"] >> writer.inputs["lai2"]
 
-    #         # TODO: fails here, but should it fail based on the test_push_writer_fail description?
-    #         # Not sure what would be the problem here...
-    #         with self.assertRaises(ValueError):
-    #             composition.run(end_time=datetime(2000, 1, 31))
+            with self.assertRaises(ValueError):
+                composition.run(end_time=datetime(2000, 1, 31))

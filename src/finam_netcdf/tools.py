@@ -1,7 +1,7 @@
 """NetCDF helper classes and functions"""
 import finam as fm
-import netCDF4 as nc
 import numpy as np
+from netCDF4 import num2date
 
 from .info_checker import DatasetInfo, check_order_reversed
 
@@ -50,11 +50,9 @@ def extract_layers(dataset):
     """
 
     layers = []
-
     data_info = DatasetInfo(dataset)
     variables = data_info.data_dims_map
     time_var = data_info.time
-
     time_var = None if not time_var else time_var.pop()
 
     # extracting names of coordinates XYZ
@@ -92,14 +90,11 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
     data_var = dataset[layer.var]
 
     # storing attributes of data_var in meta dict
-    meta = {}
-    for name in data_var.ncattrs():
-        meta[name] = getattr(data_var, name)
+    meta = {name: getattr(data_var, name) for name in data_var.ncattrs()}
 
     # gets the data for each time step as np.array if time is not None
     if isinstance(time_index, int):
-        data_var = data_var[time_index, ...]
-        data_var = np.array(data_var.filled(np.nan))
+        data_var = np.array(data_var[time_index, ...].filled(np.nan))
 
     # checks if axes were reversed or not
     order = data_info.get_axes_order(data_info.data_dims_map[layer.var])
@@ -110,8 +105,6 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
     axes_attrs = [dataset.variables[ax].ncattrs() for ax in layer.xyz]
 
     # note: we use point-associated data here.
-    # ValueError("Only UniformGrid is supported in image plot.")
-    # must be remove from finam_plot/image.py line 100
     grid = fm.RectilinearGrid(
         axes=[create_point_axis(ax) for ax in axes],
         axes_names=layer.xyz,
@@ -149,7 +142,7 @@ def create_time_dim(dataset, time_var):
     nctime = dataset[time_var][:]
     time_cal = dataset[time_var].calendar
     time_unit = dataset.variables[time_var].units
-    times = nc.num2date(
+    times = num2date(
         nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
     )
     times = np.array(times).astype("datetime64[ns]")

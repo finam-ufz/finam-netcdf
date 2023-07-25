@@ -4,7 +4,7 @@ NetCDF reader components.
 from __future__ import annotations
 
 import finam as fm
-import netCDF4 as nc
+from netCDF4 import Dataset
 
 from .tools import Layer, create_time_dim, extract_grid, extract_layers
 
@@ -54,7 +54,7 @@ class NetCdfStaticReader(fm.Component):
         self.status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
-        self.dataset = nc.Dataset(self.path)
+        self.dataset = Dataset(self.path)
 
         if self.output_vars is None:
             _time_var, layers = extract_layers(self.dataset)
@@ -184,7 +184,7 @@ class NetCdfReader(fm.TimeComponent):
         return None
 
     def _initialize(self):
-        self.dataset = nc.Dataset(self.path)
+        self.dataset = Dataset(self.path)
         if self.output_vars is None:
             self.time_var, layers = extract_layers(self.dataset)
             self.output_vars = {l.var: l for l in layers}
@@ -218,13 +218,10 @@ class NetCdfReader(fm.TimeComponent):
             self.time_indices = list(range(len(self.times)))
         else:
             self.time_indices = []
-            mn = self.time_limits[0]
-            mx = self.time_limits[1]
-            count = 0
-            for time in self.times:
+            mn, mx = self.time_limits
+            for index, time in enumerate(self.times):
                 if (mn is None or time >= mn) and (mx is None or time <= mx):
-                    self.time_indices.append(count)
-                count += 1
+                    self.time_indices.append(index)
 
         for i in range(len(self.times) - 1):
             if self.times[i] >= self.times[i + 1]:
