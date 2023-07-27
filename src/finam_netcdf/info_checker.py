@@ -1,3 +1,4 @@
+"""NetCDF info Checker"""
 import fnmatch
 
 import netCDF4 as nc
@@ -225,7 +226,7 @@ class DatasetInfo:
         self.data_dims_map = {d: dataset[d].dimensions for d in self.data}
         # get auxiliary coordinates (given under coordinate attribute and are not dims)
         self.data_with_aux = {d for d in self.data if cname in dataset[d].ncattrs()}
-        type(self).aux_coords_map = {
+        self.aux_coords_map = {
             d: dataset[d].getncattr(cname).split(" ") for d in self.data_with_aux
         }
         # needs at least one set for "union"
@@ -312,38 +313,38 @@ class DatasetInfo:
         return order
 
 
-if __name__ == "__main__":
-    dataset = nc.Dataset("/path/to/your/NetCDF/file.nc")
+# if __name__ == "__main__":
+#     dataset = nc.Dataset("/path/to/your/NetCDF/file.nc")
 
-    info = DatasetInfo(dataset)
-    print(f"{info.dims=}")  # all dims
-    print(f"{info.coords=}")  # all coordinates
-    print(f"{info.coords_with_bounds=}")  # all coords with bounds
-    print(f"{info.bounds=}")  # all bound variables
-    print(f"{info.bounds_map=}")  # coord: bounds map
-    print(f"{info.bounds_dims=}")  # all dims exclusivly used for bounds
-    print(f"{info.data=}")  # all available data
-    print(f"{info.data_with_all_coords=}")  # all data with only coordinates
-    print(f"{info.data_without_coords=}")  # all data without coordinates
-    print(f"{info.data_with_aux=}")  # all data with auxiliary coordinates
-    print(f"{info.data_dims_map=}")  # data: list(dims) map
-    print(f"{info.aux_coords=}")  # all auxiliary coordinates
-    print(f"{info.aux_coords_map=}")  # data: aux-coords map
-    print(f"{info.x=}")  # all x-axis
-    print(f"{info.y=}")  # all y-axis
-    print(f"{info.z=}")  # all z-axis
-    print(f"{info.z_down=}")  # map for downward pointing z-axis
-    print(f"{info.time=}")  # the time axis
-    print(f"{info.lat=}")  # all latitude vars
-    print(f"{info.lon=}")  # all longitude vars
-    print(f"{info.lat_axis=}")  # whether any lat is used as axis
-    print(f"{info.lon_axis=}")  # whether any lon is used as axis
-    print(f"{info.all_axes=}")  # all axes variables
-    print(f"{info.all_static=}")  # whether all data is static
-    print(f"{info.static_data=}")  # all static data
-    print(f"{info.temporal_data=}")  # all temporal data
+#     info = DatasetInfo(dataset)
+#     print(f"{info.dims=}")  # all dims
+#     print(f"{info.coords=}")  # all coordinates
+#     print(f"{info.coords_with_bounds=}")  # all coords with bounds
+#     print(f"{info.bounds=}")  # all bound variables
+#     print(f"{info.bounds_map=}")  # coord: bounds map
+#     print(f"{info.bounds_dims=}")  # all dims exclusivly used for bounds
+#     print(f"{info.data=}")  # all available data
+#     print(f"{info.data_with_all_coords=}")  # all data with only coordinates
+#     print(f"{info.data_without_coords=}")  # all data without coordinates
+#     print(f"{info.data_with_aux=}")  # all data with auxiliary coordinates
+#     print(f"{info.data_dims_map=}")  # data: list(dims) map
+#     print(f"{info.aux_coords=}")  # all auxiliary coordinates
+#     print(f"{info.aux_coords_map=}")  # data: aux-coords map
+#     print(f"{info.x=}")  # all x-axis
+#     print(f"{info.y=}")  # all y-axis
+#     print(f"{info.z=}")  # all z-axis
+#     print(f"{info.z_down=}")  # map for downward pointing z-axis
+#     print(f"{info.time=}")  # the time axis
+#     print(f"{info.lat=}")  # all latitude vars
+#     print(f"{info.lon=}")  # all longitude vars
+#     print(f"{info.lat_axis=}")  # whether any lat is used as axis
+#     print(f"{info.lon_axis=}")  # whether any lon is used as axis
+#     print(f"{info.all_axes=}")  # all axes variables
+#     print(f"{info.all_static=}")  # whether all data is static
+#     print(f"{info.static_data=}")  # all static data
+#     print(f"{info.temporal_data=}")  # all temporal data
 
-    var = "your NetCDF Varaible"
-    xyz_order = info.get_axes_order(info.data_dims_map[var])
-    print(var, xyz_order)
-    print(f"reversed: {check_order_reversed(xyz_order)}")
+#     var = "your NetCDF Varaible"
+#     xyz_order = info.get_axes_order(info.data_dims_map[var])
+#     print(var, xyz_order)
+#     print(f"reversed: {check_order_reversed(xyz_order)}")

@@ -236,7 +236,7 @@ class NetCdfReader(fm.TimeComponent):
             self._time, self.time_index = self.time_callback(self.step, None, None)
 
         for name, pars in self.output_vars.items():
-            time_index = None if pars.static == True else self.time_index
+            time_index = None if pars.static else self.time_index
 
             info, data = extract_grid(
                 self.dataset,

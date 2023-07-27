@@ -65,20 +65,21 @@ class NetCdfTimedWriter(fm.TimeComponent):
     ):
         super().__init__()
 
-        global_attrs = global_attrs or {}
         if step is not None and not isinstance(step, timedelta):
             raise ValueError("Step must be None or of type timedelta")
-        if not isinstance(global_attrs, dict):
-            raise ValueError("inputed global attributes must be of type dict")
+
         self._path = path
         self._input_dict = inputs
         self._input_names = {v.var: k for k, v in inputs.items()}
         self._step = step
         self.time_var = time_var
-        self.global_attrs = global_attrs
+        self.global_attrs = global_attrs or {}
         self.dataset = None
         self.timestamp_counter = 0
         self.status = fm.ComponentStatus.CREATED
+
+        if not isinstance(self.global_attrs, dict):
+            raise ValueError("inputed global attributes must be of type dict")
 
     @property
     def next_time(self):
@@ -196,7 +197,7 @@ class NetCdfPushWriter(fm.Component):
         self.global_attrs = global_attrs or {}
         self.last_update = None
 
-        if not isinstance(global_attrs, dict):
+        if not isinstance(self.global_attrs, dict):
             raise ValueError("inputed global attributes must be of type dict")
 
         self.all_inputs = set(inputs.keys())
@@ -256,6 +257,7 @@ class NetCdfPushWriter(fm.Component):
     def _finalize(self):
         self.dataset.close()
 
+    # pylint: disable-next=unused-argument
     def _data_changed(self, name, caller, time):
         if self.status in (
             fm.ComponentStatus.CONNECTED,
