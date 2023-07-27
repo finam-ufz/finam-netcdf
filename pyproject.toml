@@ -111,6 +111,7 @@ disable = [
     "C0103", # ignore invalid-names like "x", "y"
     "C0415", # ignore defered imports
     "R0801", # ignore code duplications
+    "E0611", # no name in module
 ]
 
 [tool.pylint.reports]
@@ -118,7 +119,7 @@ output-format = "colorized"
 
 [tool.pylint.design]
 max-args = 15
-max-locals = 20
+max-locals = 25
 max-attributes = 15
 max-parents = 10
 min-public-methods = 0

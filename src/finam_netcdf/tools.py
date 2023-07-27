@@ -134,7 +134,10 @@ def create_point_axis(cell_axis):
 
 def create_time_dim(dataset, time_var):
     """returns a list of datetime.datetime objects for a given NetCDF4 time varaible"""
-    if "units" and "calendar" not in dataset[time_var].ncattrs():
+    if (
+        "units" not in dataset[time_var].ncattrs()
+        or "calendar" not in dataset[time_var].ncattrs()
+    ):
         raise AttributeError(
             f"Variable {time_var} must have 'calendar' and 'units' atribbutes!"
         )

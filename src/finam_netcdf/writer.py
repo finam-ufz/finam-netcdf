@@ -24,7 +24,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
        from datetime import datetime, timedelta
        from finam_netcdf import Layer, NetCdfTimedWriter
 
-       file = "path/to/file.nc"
+       file = "tests/data/out.nc"
        writer = NetCdfTimedWriter(
             path=file,
             inputs={
@@ -61,10 +61,11 @@ class NetCdfTimedWriter(fm.TimeComponent):
         inputs: dict[str, Layer],
         time_var: str,
         step: timedelta,
-        global_attrs={},
+        global_attrs=None,
     ):
         super().__init__()
 
+        global_attrs = global_attrs or {}
         if step is not None and not isinstance(step, timedelta):
             raise ValueError("Step must be None or of type timedelta")
         if not isinstance(global_attrs, dict):
@@ -143,7 +144,7 @@ class NetCdfPushWriter(fm.Component):
 
        from finam_netcdf import Layer, NetCdfPushWriter
 
-       file = "path/to/file.nc"
+       file = "tests/data/out.nc"
        writer = NetCdfPushWriter(
             path=file,
             inputs={
@@ -181,7 +182,7 @@ class NetCdfPushWriter(fm.Component):
         inputs: dict[str, Layer],
         time_var: str,
         time_unit: str = "seconds",
-        global_attrs={},
+        global_attrs=None,
     ):
         super().__init__()
 
@@ -192,8 +193,11 @@ class NetCdfPushWriter(fm.Component):
         self.dataset = None
         self.timestamp_counter = 0
         self.time_unit = time_unit
-        self.global_attrs = global_attrs
+        self.global_attrs = global_attrs or {}
         self.last_update = None
+
+        if not isinstance(global_attrs, dict):
+            raise ValueError("inputed global attributes must be of type dict")
 
         self.all_inputs = set(inputs.keys())
         self.pushed_inputs = set()
@@ -299,7 +303,7 @@ def _create_nc_framework(
     in_infos,
     in_data,
     layers,
-    global_attrs={},
+    global_attrs,
 ):
     """
     creates a NetCDF with XYZ coords data, and empties time dimension and parameter variables.
@@ -321,7 +325,7 @@ def _create_nc_framework(
         layers : list
             Layer information for each variable:
             Layer(var=--, xyz=(--, --, --), fixed={--}, static=--))
-        global_attrs : dict, optional
+        global_attrs : dict
             global attributes for the NetCDF file inputed by the user
 
         Raises
@@ -339,9 +343,8 @@ def _create_nc_framework(
         layer = layers[parameter]
         if layer.var in variables:
             raise ValueError(f"Duplicated variable {layer.var}.")
-        else:
-            coordinates.append(layer.xyz)
-            variables.append(layer.var)
+        coordinates.append(layer.xyz)
+        variables.append(layer.var)
 
     equal_layers = True
     for l in coordinates:
