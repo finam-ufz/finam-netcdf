@@ -1,7 +1,6 @@
 """NetCDF info Checker"""
+# pylint: disable=R0902
 import fnmatch
-
-import netCDF4 as nc
 
 ATTRS = {
     "time": {

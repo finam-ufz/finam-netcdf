@@ -134,7 +134,6 @@ Writes time slices regularly, irrespective of input time steps.
         path=path,
         inputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
         time_var="time",
-        start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )
 
