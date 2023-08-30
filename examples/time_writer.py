@@ -22,7 +22,7 @@ if __name__ == "__main__":
     file = os.path.join(directory, "test.nc")
 
     lai_gen = fm.modules.SimplexNoise(
-        info=fm.Info(None, grid=grid, units="m"),
+        info=fm.Info(datetime(2000, 1, 1), grid=grid, units="m"),
         frequency=0.05,
         time_frequency=1.0 / (30 * 24 * 3600),
         octaves=3,
@@ -40,7 +40,6 @@ if __name__ == "__main__":
             "SM": Layer(var="soil_moisture", xyz=("x", "y")),
         },
         time_var="time",
-        start=datetime(2000, 1, 1),
         step=timedelta(days=1),
     )
 

@@ -39,15 +39,13 @@ if __name__ == "__main__":
             "SM": Layer(var="soil_moisture", xyz=("x", "y")),
         },
         time_var="time",
-        start=datetime(2000, 1, 1),
-        step=timedelta(days=1),
     )
 
     composition = fm.Composition([lai_gen, sm_gen, writer])
     composition.initialize()
 
-    _ = lai_gen.outputs["LAI"] >> writer.inputs["LAI"]
-    _ = sm_gen.outputs["SM"] >> writer.inputs["SM"]
+    lai_gen.outputs["LAI"] >> writer.inputs["LAI"]
+    sm_gen.outputs["SM"] >> writer.inputs["SM"]
 
     composition.run(end_time=datetime(2000, 1, 31))
 
