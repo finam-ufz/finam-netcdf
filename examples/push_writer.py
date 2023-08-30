@@ -39,6 +39,8 @@ if __name__ == "__main__":
             "SM": Layer(var="soil_moisture", xyz=("x", "y")),
         },
         time_var="time",
+        start=datetime(2000, 1, 1),
+        step=timedelta(days=1),
     )
 
     composition = fm.Composition([lai_gen, sm_gen, writer])

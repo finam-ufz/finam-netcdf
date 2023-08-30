@@ -1,8 +1,9 @@
 """NetCDF helper classes and functions"""
-import copy
-
 import finam as fm
 import numpy as np
+from netCDF4 import num2date
+
+from .info_checker import DatasetInfo, check_order_reversed
 
 
 class Layer:
@@ -33,117 +34,93 @@ class Layer:
 
 
 def extract_layers(dataset):
-    """Extracts layer information from a dataset"""
+    """
+    It extracts the layer information from a dataset following CF convention.
+
+
+    Parameters
+    ----------
+    dataset : str
+        NetCDF file
+
+    Returns
+    -------
+    tuple
+        tuple including time and Z variable names and layers information.
+    """
+
     layers = []
-    time_var = None
+    data_info = DatasetInfo(dataset)
+    variables = data_info.data_dims_map
+    time_var = data_info.time
+    time_var = None if not time_var else time_var.pop()
 
-    for var, data in dataset.data_vars.items():
-        coords = data.coords
-        x_var = None
-        y_var = None
-        z_var = None
-        for co, coord in coords.items():
-            if "axis" in coord.attrs:
-                ax = coord.attrs["axis"]
-                if ax == "T":
-                    time_var = _check_var(time_var, co)
-                elif ax == "X":
-                    x_var = _check_var(x_var, co)
-                elif ax == "Y":
-                    y_var = _check_var(y_var, co)
-                elif ax == "Z":
-                    z_var = _check_var(z_var, co)
-            else:
-                if coord.dtype.type == np.datetime64:
-                    time_var = _check_var(time_var, co)
+    # extracting names of coordinates XYZ
+    for var, dims in variables.items():
+        static = var in data_info.static_data
+        xyz = tuple(value for value in dims if value != time_var)
+        order = data_info.get_axes_order(xyz)
+        axes_reversed = check_order_reversed(order)
+        if axes_reversed:
+            xyz = xyz[::-1]
 
-        xyz = tuple(v for v in [x_var, y_var, z_var] if v is not None)
-        layers.append(Layer(var, xyz, static=time_var is None))
+        layers.append(Layer(var, xyz, static=static))
 
     return time_var, layers
 
 
-def _check_var(old, new):
-    if old is None or old == new:
-        return new
-    raise ValueError(f"Axis already defined as {old}. Found second axis {new}.")
-
-
-def extract_grid(dataset, layer, fixed=None):
+def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=None):
     """Extracts a 2D data array from a dataset
 
     Parameters
     ----------
-    dataset : xarray.DataSet
+    dataset : netCDF4.DataSet
         The input dataset
     layer : Layer
         The layer definition
-    fixed : dict of str, int, optional
-        Fixed variables with their indices
+    time_index : int, optional
+        index of current time
+    time_var: str, optional
+        Time variable string
+    current_time: datetime.datetime
+        (YYYY, M, D, H, S)
     """
-    variable = dataset[layer.var].load()
-    xyz = [variable.coords[ax] for ax in layer.xyz]
 
-    xdata = variable.isel(layer.fixed if fixed is None else dict(layer.fixed, **fixed))
+    data_info = DatasetInfo(dataset)
+    data_var = dataset[layer.var]
 
-    if len(xdata.dims) > 3:
-        raise ValueError(f"NetCDF variable {layer.var} has more than 3 dimensions")
-    if len(xdata.dims) != len(layer.xyz):
-        raise ValueError(
-            f"NetCDF variable {layer.var} has a different number of dimensions than given axes"
-        )
+    # storing attributes of data_var in meta dict
+    meta = {name: getattr(data_var, name) for name in data_var.ncattrs()}
 
-    for ax in layer.xyz:
-        if ax not in xdata.dims:
-            raise ValueError(
-                f"Dimension {ax} not available for NetCDF variable {layer.var}"
-            )
+    # gets the data for each time step as np.array if time is not None
+    if isinstance(time_index, int):
+        data_var = np.array(data_var[time_index, ...].filled(np.nan))
 
-    axes = [ax.data.copy() for ax in xyz]
+    # checks if axes were reversed or not
+    order = data_info.get_axes_order(data_info.data_dims_map[layer.var])
+    axes_reversed = check_order_reversed(order)
 
-    # re-order axes to xyz
-    xdata = xdata.transpose(*layer.xyz)
-
-    # flip to make all axes increasing
-    for i, is_increase in enumerate(fm.data.check_axes_monotonicity(axes)):
-        if not is_increase:
-            ax_name = layer.xyz[i]
-            xdata = xdata.reindex(**{ax_name: xdata[ax_name][::-1]}, copy=False)
-
-    # calculate properties of uniform grids
-    spacing = fm.data.check_axes_uniformity(axes)
-    origin = [ax[0] for ax in axes]
-    is_uniform = not any(np.isnan(spacing))
+    # getting coordinates data
+    axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]
+    axes_attrs = [dataset.variables[ax].ncattrs() for ax in layer.xyz]
 
     # note: we use point-associated data here.
-    if is_uniform:
-        dims = [len(ax) + 1 for ax in axes]
-        grid = fm.UniformGrid(
-            dims,
-            axes_names=layer.xyz,
-            spacing=tuple(spacing),
-            origin=tuple(o - 0.5 * s for o, s in zip(origin, spacing)),
-            data_location=fm.Location.CELLS,
-        )
-    else:
-        point_axes = [create_point_axis(ax) for ax in axes]
-        grid = fm.RectilinearGrid(
-            point_axes, axes_names=layer.xyz, data_location=fm.Location.CELLS
-        )
+    grid = fm.RectilinearGrid(
+        axes=[create_point_axis(ax) for ax in axes],
+        axes_names=layer.xyz,
+        data_location=fm.Location.CELLS,
+        axes_reversed=axes_reversed,
+        axes_attributes=axes_attrs,
+    )
 
-    meta = copy.copy(xdata.attrs)
+    # getting current time
+    times = None
+    if not layer.static and time_var in dataset.dimensions:
+        times = current_time
 
-    # re-insert the time dimension
-    time = None
-    if not layer.static and "time" in xdata.coords:
-        time = fm.data.to_datetime(xdata["time"].data)
+    info = fm.Info(time=times, grid=grid, meta=meta)
 
-    xdata = xdata.drop_vars(xdata.coords)
-    xdata = xdata.expand_dims(dim="time", axis=0)
-
-    info = fm.Info(time=time, grid=grid, meta=meta)
-
-    return info, fm.UNITS.Quantity(xdata.data, info.units)
+    return info, fm.UNITS.Quantity(np.array(data_var[:]), info.units)
 
 
 def create_point_axis(cell_axis):
@@ -153,3 +130,24 @@ def create_point_axis(cell_axis):
     first = cell_axis[0] - diffs[0] / 2
     last = cell_axis[-1] + diffs[-1] / 2
     return np.concatenate(([first], mid, [last]))
+
+
+def create_time_dim(dataset, time_var):
+    """returns a list of datetime.datetime objects for a given NetCDF4 time varaible"""
+    if (
+        "units" not in dataset[time_var].ncattrs()
+        or "calendar" not in dataset[time_var].ncattrs()
+    ):
+        raise AttributeError(
+            f"Variable {time_var} must have 'calendar' and 'units' atribbutes!"
+        )
+
+    nctime = dataset[time_var][:]
+    time_cal = dataset[time_var].calendar
+    time_unit = dataset.variables[time_var].units
+    times = num2date(
+        nctime, units=time_unit, calendar=time_cal, only_use_cftime_datetimes=False
+    )
+    times = np.array(times).astype("datetime64[ns]")
+    times = times.astype("datetime64[s]").tolist()
+    return times

@@ -5,9 +5,9 @@ from os import path
 from tempfile import TemporaryDirectory
 
 import numpy as np
-import xarray as xr
 from finam import Composition, Info, UniformGrid
 from finam.modules.generators import CallbackGenerator
+from netCDF4 import Dataset
 
 from finam_netcdf import NetCdfPushWriter, NetCdfTimedWriter
 from finam_netcdf.tools import Layer
@@ -40,6 +40,17 @@ class TestWriter(unittest.TestCase):
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
+
+            # creating global attrs to the NetCDF output file - optional
+            global_attrs = {
+                "project_name": "test_time_writer",
+                "original_source": "FINAM – Python model coupling framework",
+                "creator_url": "https://finam.pages.ufz.de",
+                "institution": "Helmholtz Centre for Environmental Research - UFZ (Helmholtz-Zentrum für Umweltforschung GmbH UFZ)",
+                "description": "FINAM test: test_time_writer",
+                "created_date": datetime.now().strftime("%d-%m-%Y"),
+            }
+
             writer = NetCdfTimedWriter(
                 path=file,
                 inputs={
@@ -47,8 +58,8 @@ class TestWriter(unittest.TestCase):
                     "LAI2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
-                start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
+                global_attrs=global_attrs,
             )
 
             composition = Composition([source1, source2, writer])
@@ -60,18 +71,20 @@ class TestWriter(unittest.TestCase):
             composition.run(end_time=datetime(2000, 1, 31))
 
             self.assertTrue(os.path.isfile(file))
+            dataset = Dataset(file)
 
-            dataset = xr.open_dataset(file)
             lai = dataset["lai"]
 
-            self.assertEqual(lai.dims, ("time", "y", "x"))
-            self.assertEqual(lai.coords["time"].shape, (31,))
-            self.assertEqual(lai.coords["x"].shape, (10,))
-            self.assertEqual(lai.coords["y"].shape, (5,))
+            dims = []
+            for dim in lai.dimensions:
+                dims.append(dim)
 
-            times = lai.coords["time"].data
-            self.assertEqual(times[0], np.datetime64(datetime(2000, 1, 1)))
-            self.assertEqual(times[-1], np.datetime64(datetime(2000, 1, 31)))
+            self.assertEqual(dims, ["time", "x", "y"])
+            self.assertEqual(lai.shape, (31, 10, 5))
+
+            times = dataset["time"][:]
+            self.assertEqual(times[0], 0.0)
+            self.assertEqual(times[-1], 30.0)
 
             dataset.close()
 
@@ -79,7 +92,10 @@ class TestWriter(unittest.TestCase):
         grid = UniformGrid((10, 5), data_location="POINTS")
 
         with TemporaryDirectory() as tmp:
-            file = path.join(tmp, "test.nc")
+            file = path.join(
+                tmp,
+                "test.nc",
+            )
 
             source1 = CallbackGenerator(
                 callbacks={"Grid": (lambda t: generate_grid(grid), Info(None, grid))},
@@ -110,17 +126,14 @@ class TestWriter(unittest.TestCase):
 
             self.assertTrue(os.path.isfile(file))
 
-            dataset = xr.open_dataset(file)
+            dataset = Dataset(file)
             lai = dataset["lai"]
 
-            self.assertEqual(lai.dims, ("time", "y", "x"))
-            self.assertEqual(lai.coords["time"].shape, (31,))
-            self.assertEqual(lai.coords["x"].shape, (10,))
-            self.assertEqual(lai.coords["y"].shape, (5,))
+            self.assertEqual(lai.dimensions, ("time", "x", "y"))
 
-            times = lai.coords["time"].data
-            self.assertEqual(times[0], np.datetime64(datetime(2000, 1, 1)))
-            self.assertEqual(times[-1], np.datetime64(datetime(2000, 1, 31)))
+            times = dataset["time"][:]
+            self.assertEqual(times[0], 0.0)
+            self.assertEqual(times[-1], 30.0 * 86400)
 
             dataset.close()
 
@@ -146,8 +159,8 @@ class TestWriter(unittest.TestCase):
             writer = NetCdfPushWriter(
                 path=file,
                 inputs={
-                    "LAI": Layer(var="lai", xyz=("x", "y")),
-                    "LAI2": Layer(var="lai2", xyz=("x", "y")),
+                    "lai": Layer(var="lai", xyz=("x", "y")),
+                    "lai2": Layer(var="lai2", xyz=("x", "y")),
                 },
                 time_var="time",
             )
@@ -155,8 +168,8 @@ class TestWriter(unittest.TestCase):
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
-            _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
+            _ = source1.outputs["Grid"] >> writer.inputs["lai"]
+            _ = source2.outputs["Grid"] >> writer.inputs["lai2"]
 
             with self.assertRaises(ValueError):
                 composition.run(end_time=datetime(2000, 1, 31))
