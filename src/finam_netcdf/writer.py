@@ -114,7 +114,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         for key_name in self._input_dict:
             var_name = self._input_dict[key_name].var
             data = self.connector.in_data[key_name].magnitude
-            self.dataset[var_name][self.timestamp_counter, :, :] = data
+            self.dataset[var_name][self.timestamp_counter, ...] = data
             current_date = date2num(self._time, self.dataset[self.time_var].units)
             self.dataset[self.time_var][self.timestamp_counter] = current_date
 
@@ -127,7 +127,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         for key_name, inp in self.inputs.items():
             var_name = self._input_dict[key_name].var
             data = inp.pull_data(self._time).magnitude
-            self.dataset[var_name][self.timestamp_counter, :, :] = data
+            self.dataset[var_name][self.timestamp_counter, ...] = data
             current_date = date2num(self._time, self.dataset[self.time_var].units)
             self.dataset[self.time_var][self.timestamp_counter] = current_date
 
@@ -244,7 +244,7 @@ class NetCdfPushWriter(fm.Component):
         for key_name in self._input_dict:
             var_name = self._input_dict[key_name].var
             data = self.connector.in_data[key_name].magnitude
-            self.dataset[var_name][self.timestamp_counter, :, :] = data
+            self.dataset[var_name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
@@ -288,7 +288,7 @@ class NetCdfPushWriter(fm.Component):
 
         for n, layer in self._input_dict.items():
             data = self.inputs[n].pull_data(time).magnitude
-            self.dataset[layer.var][self.timestamp_counter, :, :] = data
+            self.dataset[layer.var][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
