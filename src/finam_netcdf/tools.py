@@ -404,7 +404,7 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
 
     # gets the data for each time step as np.array if time is not None
     if isinstance(time_index, int):
-        data_var = np.array(data_var[time_index, ...].filled(np.nan))
+        data_var = data_var[time_index, ...]
 
     # checks if axes were reversed or not
     order = data_info.get_axes_order(data_info.data_dims_map[layer.var])
@@ -430,7 +430,7 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
 
     info = fm.Info(time=times, grid=grid, meta=meta)
 
-    return info, fm.UNITS.Quantity(np.array(data_var[:]), info.units)
+    return info, fm.UNITS.Quantity(data_var, info.units)
 
 
 def create_point_axis(cell_axis):

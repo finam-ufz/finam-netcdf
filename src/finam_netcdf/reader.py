@@ -78,9 +78,8 @@ class NetCdfStaticReader(fm.Component):
     def _connect(self, start_time):
         if self.data is None:
             self.data = {}
-            for name, pars in self.output_vars.items():
-                info, data = extract_grid(self.dataset, pars, pars.fixed)
-                data.name = name
+            for name, layer in self.output_vars.items():
+                info, data = extract_grid(self.dataset, layer, layer.fixed)
                 self.data[name] = (info, data)
 
         self.try_connect(
@@ -159,10 +158,10 @@ class NetCdfReader(fm.TimeComponent):
         super().__init__()
 
         self.path = path
-        self.output_vars = outputs
+        self.output_layers = outputs
         self.time_var = time_var
 
-        if (self.output_vars is None) != (self.time_var is None):
+        if (self.output_layers is None) != (self.time_var is None):
             raise ValueError(
                 "Only none or both of `outputs` and `time_var` must be None"
             )
@@ -170,7 +169,8 @@ class NetCdfReader(fm.TimeComponent):
         self.time_callback = time_callback
         self.time_limits = time_limits
         self.dataset = None
-        self.data = None
+        self._init_data = {}
+        self.output_infos = {}
         self.times = None
         self.time_index = None
         self.time_indices = None
@@ -185,11 +185,11 @@ class NetCdfReader(fm.TimeComponent):
 
     def _initialize(self):
         self.dataset = Dataset(self.path)
-        if self.output_vars is None:
+        if self.output_layers is None:
             self.time_var, layers = extract_layers(self.dataset)
-            self.output_vars = {l.var: l for l in layers}
+            self.output_layers = {l.var: l for l in layers}
 
-        for o, layer in self.output_vars.items():
+        for o, layer in self.output_layers.items():
             self.outputs.add(name=o, static=layer.static)
 
         self._process_initial_data()
@@ -203,15 +203,14 @@ class NetCdfReader(fm.TimeComponent):
             self.data_pushed = True
             self.try_connect(
                 start_time,
-                push_infos={name: value[0] for name, value in self.data.items()},
-                push_data={name: value[1] for name, value in self.data.items()},
+                push_data={name: data for name, data in self._init_data.items()},
+                push_infos={name: info for name, info in self.output_infos.items()},
             )
 
         if self.status == fm.ComponentStatus.CONNECTED:
-            del self.data
+            del self._init_data
 
     def _process_initial_data(self):
-        self.data = {}
         self.times = create_time_dim(self.dataset, self.time_var)
 
         if self.time_limits is None:
@@ -235,21 +234,20 @@ class NetCdfReader(fm.TimeComponent):
         else:
             self._time, self.time_index = self.time_callback(self.step, None, None)
 
-        for name, pars in self.output_vars.items():
-            time_index = None if pars.static else self.time_index
-
+        for name, layer in self.output_layers.items():
+            time_index = None if layer.static else self.time_index
             info, data = extract_grid(
                 self.dataset,
-                pars,
+                layer,
                 time_index,
                 self.time_var,
                 self._time,
             )
-            data.name = name
             info.time = self._time
             if self.time_callback is not None:
                 data = fm.data.strip_time(data, info.grid)
-            self.data[name] = (info, data)
+            self._init_data[name] = data
+            self.output_infos[name] = info
 
     def _validate(self):
         pass
@@ -267,20 +265,19 @@ class NetCdfReader(fm.TimeComponent):
             self._time, self.time_index = self.time_callback(
                 self.step, self._time, self.time_index
             )
-        for name, pars in self.output_vars.items():
-            if pars.static:
+        for out in self.output_layers:
+            name = self.output_layers[out].var
+
+            if self.output_layers[out].static:
                 continue
 
-            info, data = extract_grid(
-                self.dataset,
-                pars,
-                self.time_indices[self.time_index],
-                self.time_var,
-                self._time,
-            )
+            data = self.dataset[name][self.time_indices[self.time_index], ...]
+            data = fm.UNITS.Quantity(data, self.output_infos[out].units)
+
             if self.time_callback is not None:
-                data = fm.data.strip_time(data, info.grid)
-            self._outputs[name].push_data(data, self._time)
+                data = fm.data.strip_time(data, self.output_infos[out].grid)
+
+            self._outputs[out].push_data(data, self._time)
 
     def _finalize(self):
         self.dataset.close()
