@@ -2,7 +2,7 @@
 About
 =====
 
-Here you find further information about licensing, the developers team and the changelog of FINAM.
+Here you find further information about licensing, the developers team and the changelog of FINAM-NetCDF.
 
 .. toctree::
     :hidden:
