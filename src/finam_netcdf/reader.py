@@ -48,7 +48,7 @@ class NetCdfStaticReader(fm.Component):
     def __init__(self, path: str, outputs: dict[str, Layer] = None):
         super().__init__()
         self.path = path
-        self.output_vars = outputs
+        self.output_layers = outputs
         self.dataset = None
         self.data = None
         self.status = fm.ComponentStatus.CREATED
@@ -56,21 +56,21 @@ class NetCdfStaticReader(fm.Component):
     def _initialize(self):
         self.dataset = Dataset(self.path)
 
-        if self.output_vars is None:
+        if self.output_layers is None:
             _time_var, layers = extract_layers(self.dataset)
-            self.output_vars = {}
+            self.output_layers = {}
             for l in layers:
                 if l.static:
-                    self.output_vars[l.var] = l
+                    self.output_layers[l.var] = l
                 else:
                     self.logger.warning(
                         "Skipping variable %s, as it is not static.", l.var
                     )
         else:
-            for layer in self.output_vars.values():
+            for layer in self.output_layers.values():
                 layer.static = True
 
-        for o in self.output_vars.keys():
+        for o in self.output_layers.keys():
             self.outputs.add(name=o, static=True)
 
         self.create_connector()
@@ -78,7 +78,7 @@ class NetCdfStaticReader(fm.Component):
     def _connect(self, start_time):
         if self.data is None:
             self.data = {}
-            for name, layer in self.output_vars.items():
+            for name, layer in self.output_layers.items():
                 info, data = extract_grid(self.dataset, layer, layer.fixed)
                 self.data[name] = (info, data)
 
@@ -203,8 +203,8 @@ class NetCdfReader(fm.TimeComponent):
             self.data_pushed = True
             self.try_connect(
                 start_time,
-                push_data={name: data for name, data in self._init_data.items()},
-                push_infos={name: info for name, info in self.output_infos.items()},
+                push_data=self._init_data,
+                push_infos=self.output_infos,
             )
 
         if self.status == fm.ComponentStatus.CONNECTED:
