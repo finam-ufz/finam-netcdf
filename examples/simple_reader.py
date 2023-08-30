@@ -19,7 +19,7 @@ if __name__ == "__main__":
     composition = fm.Composition([reader, viewer])
     composition.initialize()
 
-    _ = reader.outputs["LAI"] >> viewer.inputs["Grid"]
+    reader.outputs["LAI"] >> viewer.inputs["Grid"]
 
     composition.run()
 

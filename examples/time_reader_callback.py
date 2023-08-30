@@ -28,6 +28,6 @@ if __name__ == "__main__":
     composition = fm.Composition([reader, viewer])
     composition.initialize()
 
-    _ = reader.outputs["LAI"] >> fm.adapters.LinearTime() >> viewer.inputs["Grid"]
+    reader.outputs["LAI"] >> fm.adapters.LinearTime() >> viewer.inputs["Grid"]
 
     composition.run(end_time=datetime(2005, 1, 1))
