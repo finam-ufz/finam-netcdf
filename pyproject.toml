@@ -11,7 +11,7 @@ name = "finam_netcdf"
 description = "FINAM NetCDF I/O components."
 authors = [{name = "FINAM Developers", email = "finam@ufz.de"}]
 readme = "README.md"
-license = "LGPLv3"
+license = "LGPL-3.0"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
