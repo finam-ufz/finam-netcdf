@@ -49,7 +49,7 @@ Changelog = "https://git.ufz.de/FINAM/finam-netcdf/-/blob/main/finam-netcdf/CHAN
 [project.optional-dependencies]
 doc = [
     "sphinx>=6",
-    "pydata-sphinx-theme==0.13",
+    "pydata-sphinx-theme>=0.13,<0.14",
     "numpydoc>=1.1",
     "sphinx-design>=0.4",
     "myst-parser>=1.0",
