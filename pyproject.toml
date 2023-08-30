@@ -36,8 +36,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.14.5",
     "netCDF4>=1.5.8,<2",
-    "pint>=0.20.0",
-    "pint_xarray>=0.3.0",
     "finam",
 ]
 
