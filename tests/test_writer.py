@@ -65,8 +65,8 @@ class TestWriter(unittest.TestCase):
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
-            _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
+            source1.outputs["Grid"] >> writer.inputs["LAI"]
+            source2.outputs["Grid"] >> writer.inputs["LAI2"]
 
             composition.run(end_time=datetime(2000, 1, 31))
 
@@ -119,8 +119,8 @@ class TestWriter(unittest.TestCase):
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
-            _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
+            source1.outputs["Grid"] >> writer.inputs["LAI"]
+            source2.outputs["Grid"] >> writer.inputs["LAI2"]
 
             composition.run(end_time=datetime(2000, 1, 31))
 
@@ -168,8 +168,8 @@ class TestWriter(unittest.TestCase):
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["lai"]
-            _ = source2.outputs["Grid"] >> writer.inputs["lai2"]
+            source1.outputs["Grid"] >> writer.inputs["lai"]
+            source2.outputs["Grid"] >> writer.inputs["lai2"]
 
             with self.assertRaises(ValueError):
                 composition.run(end_time=datetime(2000, 1, 31))
