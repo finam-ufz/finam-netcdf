@@ -1,4 +1,5 @@
 """NetCDF helper classes and functions"""
+# pylint: disable=R0902
 import fnmatch
 
 import finam as fm
