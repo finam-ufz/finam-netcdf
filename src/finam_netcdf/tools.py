@@ -412,7 +412,15 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
 
     # getting coordinates data
     axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]
-    axes_attrs = [dataset.variables[ax].ncattrs() for ax in layer.xyz]
+    # _FillValue and missing_value not allowed for coordinates
+    axes_attrs = [
+        {
+            name: dataset.variables[ax].getncattr(name)
+            for name in dataset.variables[ax].ncattrs()
+            if name not in ["_FillValue", "missing_value"]
+        }
+        for ax in layer.xyz
+    ]
 
     # note: we use point-associated data here.
     grid = fm.RectilinearGrid(

@@ -392,9 +392,9 @@ def _create_nc_framework(
             )
         dataset.createDimension(ax, len(grid_info.data_axes[i]))
         dataset.createVariable(ax, grid_info.data_axes[i].dtype, (ax,))
-        dataset[ax][:] = grid_info.data_axes[i]
         dataset[ax].setncatts(grid_info.axes_attributes[i])
         dataset[ax].setncattr("axis", "XYZ"[i])
+        dataset[ax][:] = grid_info.data_axes[i]
 
     # creating parameter variables
     for parameter in in_data:
