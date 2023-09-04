@@ -378,7 +378,7 @@ def _create_nc_framework(
             else "seconds"
         )
 
-    t_var.units = freq + " since " + str(start_date)
+    t_var.units = f"{freq} since {start_date}"
     t_var.calendar = "standard"
 
     # creating xyz dim and var | all var have the same ordered layer.xyz & data coords
@@ -393,10 +393,12 @@ def _create_nc_framework(
         dataset.createDimension(ax, len(grid_info.data_axes[i]))
         dataset.createVariable(ax, grid_info.data_axes[i].dtype, (ax,))
         dataset[ax][:] = grid_info.data_axes[i]
+        dataset[ax].setncatts(grid_info.axes_attributes[i])
         dataset[ax].setncattr("axis", "XYZ"[i])
 
     # creating parameter variables
     for parameter in in_data:
         dim = (time_var,) + coordinates[0]  # time plus existing coords
         var = dataset.createVariable(layers[parameter].var, np.float64, dim)
-        var.units = str(in_data[parameter].units)
+        meta = in_infos[parameter].meta
+        var.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
