@@ -46,13 +46,16 @@ class NetCdfTimedWriter(fm.TimeComponent):
     path : str
         Path to the NetCDF file to read.
     inputs : dict of str, Layer
-        Dictionary of inputs. Keys are output names, values are :class:`.Layer` objects.
+        Dictionary of inputs. Keys are input names, values are :class:`.Layer` objects.
     time_var : str
         Name of the time coordinate.
     step : datetime.timedelta
         Time step
     global_attrs : dict, optional
             global attributes for the NetCDF file inputed by the user.
+    inputs_units : dict, optional
+        Dictionary of inputs units.
+        Keys are input names, values are None (taken from input) or a valid pint Unit input.
     """
 
     def __init__(
@@ -62,6 +65,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         time_var: str,
         step: timedelta,
         global_attrs=None,
+        inputs_units=None,
     ):
         super().__init__()
 
@@ -71,6 +75,9 @@ class NetCdfTimedWriter(fm.TimeComponent):
         self._path = path
         self._input_dict = inputs
         self._input_names = {v.var: k for k, v in inputs.items()}
+        self._units = inputs_units or {}
+        for name in self._input_dict:
+            self._units.setdefault(name)
         self._step = step
         self.time_var = time_var
         self.global_attrs = global_attrs or {}
@@ -87,7 +94,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     def _initialize(self):
         for inp in self._input_dict.keys():
-            self.inputs.add(name=inp, time=self.time, grid=None, units=None)
+            self.inputs.add(name=inp, time=self.time, grid=None, units=self._units[inp])
 
         self.dataset = Dataset(self._path, "w")
 
@@ -168,13 +175,16 @@ class NetCdfPushWriter(fm.Component):
     path : str
         Path to the NetCDF file to read.
     inputs : dict of str, Layer
-        Dictionary of inputs. Keys are output names, values are :class:`.Layer` objects.
+        Dictionary of inputs. Keys are input names, values are :class:`.Layer` objects.
     time_var : str
         Name of the time coordinate.
     time_unit : str, optional
         time unit given as a string: days, hours, minutes or seconds.
     global_attrs : dict, optional
             global attributes for the NetCDF file inputed by the user.
+    inputs_units : dict, optional
+        Dictionary of inputs units.
+        Keys are input names, values are None (taken from input) or a valid pint Unit input.
     """
 
     def __init__(
@@ -184,12 +194,16 @@ class NetCdfPushWriter(fm.Component):
         time_var: str,
         time_unit: str = "seconds",
         global_attrs=None,
+        inputs_units=None,
     ):
         super().__init__()
 
         self._path = path
         self._input_dict = inputs
         self._input_names = {v.var: k for k, v in inputs.items()}
+        self._units = inputs_units or {}
+        for name in self._input_dict:
+            self._units.setdefault(name)
         self.time_var = time_var
         self.dataset = None
         self.timestamp_counter = 0
@@ -213,7 +227,7 @@ class NetCdfPushWriter(fm.Component):
                     callback=partial(self._data_changed, inp),
                     time=None,
                     grid=None,
-                    units=None,
+                    units=self._units[inp],
                 )
             )
         self.dataset = Dataset(self._path, "w")
