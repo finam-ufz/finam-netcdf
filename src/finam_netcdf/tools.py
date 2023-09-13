@@ -6,6 +6,51 @@ import finam as fm
 import numpy as np
 from netCDF4 import num2date
 
+Z_STD_NAME_POSITIVE = {
+    "altitude": "up",
+    "atmosphere_ln_pressure_coordinate": "down",
+    "atmosphere_sigma_coordinate": "down",
+    "atmosphere_hybrid_sigma_pressure_coordinate": "down",
+    "atmosphere_sigma": "down",
+    "ocean_sigma_coordinate": "up",
+    "ocean_double_sigma_coordinate": "down",
+    "ocean_s_coordinate": "down",
+    "ocean_s_coordinate_g1": "down",
+    "ocean_s_coordinate_g2": "down",
+    "ocean_s_coordinate_g1_threshold": "down",
+    "ocean_s_coordinate_g2_threshold": "down",
+    "ocean_sea_water_sigma": "down",
+    "ocean_sea_water_sigma_theta": "down",
+    "ocean_sea_water_potential_temperature": "down",
+    "ocean_sea_water_salinity": "down",
+    "ocean_density": "down",
+    "ocean_sigma": "down",
+    "ocean_isopycnal_coordinate": "down",
+    "ocean_isopycnal_potential_density": "down",
+    "ocean_isopycnal_theta": "down",
+    "ocean_isopycnal_sigma": "down",
+    "ocean_layer": "down",
+    "ocean_sigma_z": "down",
+    "ocean_sigma_theta": "down",
+    "ocean_double_sigma_coordinate": "down",
+    "ocean_double_sigma_coordinate_g1": "down",
+    "ocean_double_sigma_coordinate_g2": "down",
+    "ocean_double_sigma_coordinate_g1_threshold": "down",
+    "ocean_double_sigma_coordinate_g2_threshold": "down",
+    "ocean_z_coordinate": "down",
+    "ocean_z_coordinate_g1": "down",
+    "ocean_z_coordinate_g2": "down",
+    "ocean_z_coordinate_g1_threshold": "down",
+    "ocean_z_coordinate_g2_threshold": "down",
+    "height": "up",
+    "height_above_geopotential_surface": "up",
+    "height_above_reference_ellipsoid": "up",
+    "height_above_sea_floor": "up",
+    "depth": "down",
+    "depth_below_geoid": "down",
+    "depth_below_sea_floor": "down",
+}
+
 ATTRS = {
     "time": {
         "axis": ("T",),
@@ -58,15 +103,7 @@ ATTRS = {
     },
     "Z": {
         "axis": ("Z",),
-        "standard_name": (
-            "level",
-            "pressure level",
-            "depth",
-            "height",
-            "vertical level",
-            "elevation",
-            "altitude",
-        ),
+        "standard_name": tuple(Z_STD_NAME_POSITIVE),
         "long_name": (
             "level",
             "pressure level",
@@ -156,7 +193,7 @@ def find_axis(name, dataset):
 
 def check_order_reversed(order):
     """
-    Check if axes order is reversed
+    Check if axes order is reversed.
 
     Parameters
     ----------
@@ -246,10 +283,14 @@ class DatasetInfo:
             self.z_down[z] = None  # None to indicate unknown
             if "positive" in dataset[z].ncattrs():
                 self.z_down[z] = dataset[z].getncattr("positive") == "down"
+            elif "standard_name" in dataset[z].ncattrs():
+                std_name = dataset[z].getncattr("standard_name")
+                if std_name in Z_STD_NAME_POSITIVE:
+                    self.z_down[z] = Z_STD_NAME_POSITIVE[std_name] == "down"
         self.lon = find_axis("longitude", dataset)
         self.lat = find_axis("latitude", dataset)
-        self.x -= self.lon  # treat lon separatly from x-axis
-        self.y -= self.lat  # treat lat separatly from y-axis
+        self.x -= self.lon  # treat lon separately from x-axis
+        self.y -= self.lat  # treat lat separately from y-axis
         # state if lat/lon are valid coord axis
         self.lon_axis = bool(self.lon & self.coords)
         self.lat_axis = bool(self.lat & self.coords)
@@ -400,7 +441,7 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
     data_var = dataset[layer.var]
 
     # storing attributes of data_var in meta dict
-    meta = {name: getattr(data_var, name) for name in data_var.ncattrs()}
+    meta = {name: data_var.getncattr(name) for name in data_var.ncattrs()}
 
     # gets the data for each time step as np.array if time is not None
     if isinstance(time_index, int):
