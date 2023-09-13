@@ -13,7 +13,6 @@ Z_STD_NAME_POSITIVE = {
     "atmosphere_hybrid_sigma_pressure_coordinate": "down",
     "atmosphere_sigma": "down",
     "ocean_sigma_coordinate": "up",
-    "ocean_double_sigma_coordinate": "down",
     "ocean_s_coordinate": "down",
     "ocean_s_coordinate_g1": "down",
     "ocean_s_coordinate_g2": "down",
@@ -219,6 +218,19 @@ def check_order_reversed(order):
     raise ValueError(f"NetCDF: axes order is neither standard nor reversed: '{order}'")
 
 
+def _set_z_down(dataset, zvars):
+    z_down = {}  # specify direction of z axis
+    for z in zvars:
+        z_down[z] = None  # None to indicate unknown
+        if "positive" in dataset[z].ncattrs():
+            z_down[z] = dataset[z].getncattr("positive") == "down"
+        elif "standard_name" in dataset[z].ncattrs():
+            std_name = dataset[z].getncattr("standard_name")
+            if std_name in Z_STD_NAME_POSITIVE:
+                z_down[z] = Z_STD_NAME_POSITIVE[std_name] == "down"
+    return z_down
+
+
 class DatasetInfo:
     """
     Dataset Info container.
@@ -278,15 +290,7 @@ class DatasetInfo:
         self.x = find_axis("X", dataset) & self.coords
         self.y = find_axis("Y", dataset) & self.coords
         self.z = find_axis("Z", dataset) & self.coords
-        self.z_down = {}  # specify direction of z axis
-        for z in self.z:
-            self.z_down[z] = None  # None to indicate unknown
-            if "positive" in dataset[z].ncattrs():
-                self.z_down[z] = dataset[z].getncattr("positive") == "down"
-            elif "standard_name" in dataset[z].ncattrs():
-                std_name = dataset[z].getncattr("standard_name")
-                if std_name in Z_STD_NAME_POSITIVE:
-                    self.z_down[z] = Z_STD_NAME_POSITIVE[std_name] == "down"
+        self.z_down = _set_z_down(dataset, self.z)
         self.lon = find_axis("longitude", dataset)
         self.lat = find_axis("latitude", dataset)
         self.x -= self.lon  # treat lon separately from x-axis
