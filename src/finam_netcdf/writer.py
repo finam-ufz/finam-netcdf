@@ -18,19 +18,11 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     .. testcode:: constructor
 
-       from datetime import datetime, timedelta
-       from finam_netcdf import Layer, NetCdfTimedWriter
+       from datetime import timedelta
+       from finam_netcdf import NetCdfTimedWriter
 
        file = "tests/data/out.nc"
-       writer = NetCdfTimedWriter(
-            path=file,
-            inputs={
-                "LAI": Layer(var="lai", xyz=("lon", "lat")),
-                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
-            },
-            time_var="time",
-            step=timedelta(days=1),
-       )
+       writer = NetCdfTimedWriter(path=file, ["lai", "soil_moist"], step=timedelta(days=1))
 
     .. testcode:: constructor
         :hide:
@@ -164,17 +156,10 @@ class NetCdfPushWriter(fm.Component):
 
     .. testcode:: constructor
 
-       from finam_netcdf import Layer, NetCdfPushWriter
+       from finam_netcdf import NetCdfPushWriter
 
        file = "tests/data/out.nc"
-       writer = NetCdfPushWriter(
-            path=file,
-            inputs={
-                "LAI": Layer(var="lai", xyz=("lon", "lat")),
-                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
-            },
-            time_var="time",
-       )
+       writer = NetCdfPushWriter(file, ["lai", "soil_moisture"])
 
     .. testcode:: constructor
         :hide:
@@ -188,8 +173,8 @@ class NetCdfPushWriter(fm.Component):
 
     path : str
         Path to the NetCDF file to read.
-    inputs : dict of str, Layer
-        Dictionary of inputs. Keys are input names, values are :class:`.Layer` objects.
+    inputs : list of str or Variable.
+        List of inputs. Input is either defined by name or a :class:`Variable` instance.
     time_var : str
         Name of the time coordinate.
     time_unit : str, optional

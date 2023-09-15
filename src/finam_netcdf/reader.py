@@ -23,7 +23,7 @@ class NetCdfStaticReader(fm.Component):
 
     .. testcode:: constructor
 
-       from finam_netcdf import Layer, NetCdfStaticReader
+       from finam_netcdf import Variable, NetCdfStaticReader
 
        path = "tests/data/lai.nc"
 
@@ -31,10 +31,7 @@ class NetCdfStaticReader(fm.Component):
        reader = NetCdfStaticReader(path)
 
        # explicit data variables
-       reader = NetCdfStaticReader(
-           path,
-           {"LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0})},
-       )
+       reader = NetCdfStaticReader(path, [Variable("lai", slices={"time": 0})])
 
     .. testcode:: constructor
         :hide:
@@ -103,7 +100,7 @@ class NetCdfReader(fm.TimeComponent):
 
     .. testcode:: constructor
 
-       from finam_netcdf import Layer, NetCdfReader
+       from finam_netcdf import Variable, NetCdfReader
 
        path = "tests/data/lai.nc"
 
