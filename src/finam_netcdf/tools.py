@@ -736,22 +736,25 @@ def create_nc_framework(
         t_var.calendar = "standard"
 
     for var in variables:
-        grid_info = in_infos[var.io_name].grid
-        for i, ax in enumerate(grid_info.axes_names):
+        grid = in_infos[var.io_name].grid
+        if not isinstance(grid, fm.data.StructuredGrid):
+            msg = f"NetCDF: {var.name} is not given on a structured grid."
+            raise ValueError(msg)
+        for i, ax in enumerate(grid.axes_names):
             if ax in dataset.variables:
                 # check if existing axes is same as this one
-                ax1, ax2 = dataset[ax][:], grid_info.data_axes[i]
+                ax1, ax2 = dataset[ax][:], grid.data_axes[i]
                 if np.size(ax1) == np.size(ax2) and np.allclose(ax1, ax2):
                     continue
                 raise ValueError("NetCDF: can't add different axes with same name.")
-            dataset.createDimension(ax, len(grid_info.data_axes[i]))
-            dataset.createVariable(ax, grid_info.data_axes[i].dtype, (ax,))
-            dataset[ax].setncatts(grid_info.axes_attributes[i])
+            dataset.createDimension(ax, len(grid.data_axes[i]))
+            dataset.createVariable(ax, grid.data_axes[i].dtype, (ax,))
+            dataset[ax].setncatts(grid.axes_attributes[i])
             dataset[ax].setncattr("axis", "XYZ"[i])
-            dataset[ax][:] = grid_info.data_axes[i]
+            dataset[ax][:] = grid.data_axes[i]
             # add axis bounds if data location is cells
 
-        dim = (time_var,) * (not var.static) + tuple(grid_info.axes_names)
+        dim = (time_var,) * (not var.static) + tuple(grid.axes_names)
         dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
         ncvar = dataset.createVariable(var.name, dtype, dim)
         meta = in_infos[var.io_name].meta
