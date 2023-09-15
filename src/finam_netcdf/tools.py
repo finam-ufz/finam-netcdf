@@ -484,11 +484,13 @@ def extract_variables(dataset, variables=None, only_static=False):
         variables = create_variable_list(info.static_data if only_static else info.data)
     else:
         variables = create_variable_list(variables)
+
     # check if all variables are present
     if not set(v.name for v in variables) <= info.data:
         miss = set(v.name for v in variables) - info.data
         msg = f"NetCDF: some variables are not present in the file: {miss}"
         raise ValueError(msg)
+
     # check for static data
     tname = None if info.all_static else next(iter(info.time))
     for var in variables:
@@ -507,6 +509,7 @@ def extract_variables(dataset, variables=None, only_static=False):
             temp = [var.name for var in variables if not var.static]
             msg = f"NetCDF: Some variables are not static but should: {temp}"
             raise ValueError(msg)
+
     # check if all variables have correct dims and slices
     for var in variables:
         slice_dims = set(var.slices)
@@ -602,13 +605,17 @@ def extract_info(dataset, variable, current_time=None):
             axes_attributes=axes_attrs,
         )
 
-    # getting current time
-    time = None if variable.static else current_time
-
     # update with provided meta from variable object
-    meta.update(variable.get_meta())
+    add_meta = variable.get_meta()
+    if "units" in meta and "units" in add_meta:
+        u1, u2 = meta["units"], add_meta["units"]
+        if not fm.data.tools.equivalent_units(u1, u2):
+            name = variable.name
+            msg = f"NetCDF: {name} was provided with different units: {u1}, {u2}"
+            raise ValueError(msg)
+    meta.update()
 
-    return fm.Info(time=time, grid=grid, meta=meta)
+    return fm.Info(time=current_time, grid=grid, meta=meta)
 
 
 def extract_data(dataset, variable, time_var=None, time_index=None):
@@ -698,9 +705,8 @@ def create_nc_framework(
         grid data and units for each output variable
     in_data : dict
         array data and units for each output variable
-    variables : list
-        Layer information for each variable:
-        Layer(var=--, xyz=(--, --, --), fixed={--}, static=--))
+    variables : list of Variable
+        Variable informations.
     global_attrs : dict
         global attributes for the NetCDF file inputed by the user
 
