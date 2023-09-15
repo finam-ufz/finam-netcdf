@@ -72,7 +72,7 @@ This example cycles through the 12 rasters every year:
 .. testcode:: time-manipulation
 
     from datetime import datetime
-    from finam_netcdf import Layer, NetCdfReader
+    from finam_netcdf import NetCdfReader
 
     start = datetime(2000, 1, 1)
 
