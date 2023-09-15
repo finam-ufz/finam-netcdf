@@ -22,7 +22,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
        from finam_netcdf import NetCdfTimedWriter
 
        file = "tests/data/out.nc"
-       writer = NetCdfTimedWriter(path=file, ["lai", "soil_moist"], step=timedelta(days=1))
+       writer = NetCdfTimedWriter(file, ["lai", "soil_moist"], step=timedelta(days=1))
 
     .. testcode:: constructor
         :hide:

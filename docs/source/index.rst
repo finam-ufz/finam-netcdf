@@ -39,36 +39,26 @@ Both components can read multiple variables from a single dataset.
 """"""""""""""""""""""""""""
 
 Reads once during initialization of the coupling setup.
-All coordinate dimensions except those in `xyz` must be fixed at a certain index.
+A time slice must be provided if the variable is actually temporal.
 
 .. testcode:: NetCdfStaticReader
 
-    from finam_netcdf import Layer, NetCdfStaticReader
+    from finam_netcdf import Variable, NetCdfStaticReader
 
     path = "tests/data/lai.nc"
-    reader = NetCdfStaticReader(
-        path=path,
-        outputs={
-            "LAI": Layer(var="lai", xyz=("lon", "lat"), fixed={"time": 0}),
-        }
-    )
+    reader = NetCdfStaticReader(path, [Variable("lai", fixed={"time": 0})])
 
 :class:`.NetCdfReader`
 """"""""""""""""""""""
 
 Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also [Time manipulation](#time-manipulation)).
-All coordinate dimensions except those in `xyz` and `time` must be fixed at a certain index.
 
 .. testcode:: NetCdfReader
 
-    from finam_netcdf import Layer, NetCdfReader
+    from finam_netcdf import NetCdfReader
 
     path = "tests/data/lai.nc"
-    reader = NetCdfReader(
-        path=path,
-        outputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
-        time_var="time"
-    )
+    reader = NetCdfReader(path, ["lai"])
 
 When multiple variables/layers are read, they must all use the same time dimension (i.e. they must have common time steps).
 
@@ -93,12 +83,7 @@ This example cycles through the 12 rasters every year:
 
 
     path = "tests/data/lai.nc"
-    reader = NetCdfReader(
-        path=path,
-        outputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
-        time_var="time",
-        time_callback=to_time_step,
-    )
+    reader = NetCdfReader(path, ["lai"], time_callback=to_time_step)
 
 Outputs
 """""""
@@ -107,7 +92,7 @@ Component outputs can be accessed by the keys used for `outputs`, e.g. for linki
 
 .. code-block:: Python
 
-    reader.outputs["LAI"] >> viewer.inputs["Grid"]
+    reader.outputs["lai"] >> viewer.inputs["Grid"]
 
 Writers
 ^^^^^^^
@@ -126,16 +111,11 @@ Writes time slices regularly, irrespective of input time steps.
 
 .. testcode:: NetCdfTimedWriter
 
-    from datetime import datetime, timedelta
-    from finam_netcdf import Layer, NetCdfTimedWriter
+    from datetime import timedelta
+    from finam_netcdf import NetCdfTimedWriter
 
     path = "tests/data/out.nc"
-    reader = NetCdfTimedWriter(
-        path=path,
-        inputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
-        time_var="time",
-        step=timedelta(days=1),
-    )
+    reader = NetCdfTimedWriter(path, ["lai"], step=timedelta(days=1))
 
 :class:`.NetCdfPushWriter`
 """"""""""""""""""""""""""
@@ -145,14 +125,10 @@ Note that all input data sources must have the same time step!
 
 .. testcode:: NetCdfPushWriter
 
-    from finam_netcdf import Layer, NetCdfPushWriter
+    from finam_netcdf import NetCdfPushWriter
 
     path = "tests/data/out.nc"
-    reader = NetCdfPushWriter(
-        path=path,
-        inputs={"LAI": Layer(var="lai", xyz=("lon", "lat"))},
-        time_var="time"
-    )
+    reader = NetCdfPushWriter(path, ["lai"])
 
 API References
 --------------
