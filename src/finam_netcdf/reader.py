@@ -7,7 +7,6 @@ import finam as fm
 from netCDF4 import Dataset
 
 from .tools import (
-    Variable,
     create_time_dim,
     extract_data,
     extract_info,

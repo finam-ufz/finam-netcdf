@@ -418,6 +418,7 @@ class Variable:
         self.info_kwargs = info_kwargs
 
     def get_meta(self):
+        """Get the meta-data dictionary of this variable."""
         meta = self.info_kwargs.get("meta", {})
         meta.update(
             {
@@ -440,13 +441,13 @@ class Variable:
         )
 
 
-def create_variable_list(vars):
+def create_variable_list(variables):
     """
     Create a list of Variable instances.
 
     Parameters
     ----------
-    vars : list of str of Variable
+    variables : list of str or Variable
         List containing Variable instances or names.
 
     Returns
@@ -454,7 +455,7 @@ def create_variable_list(vars):
     list of Variable
         List containing only Variable instances.
     """
-    return [var if isinstance(var, Variable) else Variable(var) for var in vars]
+    return [var if isinstance(var, Variable) else Variable(var) for var in variables]
 
 
 def extract_variables(dataset, variables=None, only_static=False):

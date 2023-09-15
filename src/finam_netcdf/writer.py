@@ -1,13 +1,10 @@
 """
 NetCDF writer components.
 """
-from __future__ import annotations
-
 from datetime import datetime, timedelta
 from functools import partial
 
 import finam as fm
-import numpy as np
 from netCDF4 import Dataset, date2num
 
 from .tools import create_nc_framework, create_variable_list
