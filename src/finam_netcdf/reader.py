@@ -71,7 +71,7 @@ class NetCdfStaticReader(fm.Component):
         self.create_connector()
 
     def _connect(self, start_time):
-        if self.info is None:
+        if self._infos is None:
             self._data = {}
             self._infos = {}
             for var in self.variables:
@@ -112,11 +112,10 @@ class NetCdfReader(fm.TimeComponent):
        reader = NetCdfReader(path)
 
        # explicit data variables
-       reader = NetCdfReader(
-           path,
-           {"LAI": Layer(var="lai", xyz=("lon", "lat"))},
-           time_var="time"
-       )
+       reader = NetCdfReader(path, outputs=["lai"])
+
+       # explicit data variables with additional information
+       reader = NetCdfReader(path, outputs=[Variable("lai", slices={"time": 0})])
 
     .. testcode:: constructor
         :hide:
@@ -192,27 +191,30 @@ class NetCdfReader(fm.TimeComponent):
             del self._init_data
 
     def _process_initial_data(self):
-        self.times = create_time_dim(self.dataset, self.time_var)
+        if self.time_var is not None:
+            self.times = create_time_dim(self.dataset, self.time_var)
 
-        if self.time_limits is None:
-            self.time_indices = list(range(len(self.times)))
+            if self.time_limits is None:
+                self.time_indices = list(range(len(self.times)))
+            else:
+                self.time_indices = []
+                mn, mx = self.time_limits
+                for index, time in enumerate(self.times):
+                    if (mn is None or time >= mn) and (mx is None or time <= mx):
+                        self.time_indices.append(index)
+
+            for i in range(len(self.times) - 1):
+                if self.times[i] >= self.times[i + 1]:
+                    msg = f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
+                    raise ValueError(msg)
+
+            if self.time_callback is None:
+                self.time_index = 0
+                self._time = self.times[self.time_indices[self.time_index]]
+            else:
+                self._time, self.time_index = self.time_callback(self.step, None, None)
         else:
-            self.time_indices = []
-            mn, mx = self.time_limits
-            for index, time in enumerate(self.times):
-                if (mn is None or time >= mn) and (mx is None or time <= mx):
-                    self.time_indices.append(index)
-
-        for i in range(len(self.times) - 1):
-            if self.times[i] >= self.times[i + 1]:
-                msg = f"NetCDF reader requires time dimension '{self.time_var}' to be in ascending order."
-                raise ValueError(msg)
-
-        if self.time_callback is None:
-            self.time_index = 0
-            self._time = self.times[self.time_indices[self.time_index]]
-        else:
-            self._time, self.time_index = self.time_callback(self.step, None, None)
+            self.time_indices, self.time_index = [0], 0
 
         for var in self.variables:
             info = extract_info(self.dataset, var, self._time)
@@ -230,14 +232,20 @@ class NetCdfReader(fm.TimeComponent):
 
         if self.time_callback is None:
             self.time_index += 1
-            if self.time_index >= len(self.time_indices):
-                self._status = fm.ComponentStatus.FINISHED
-                return
-            self._time = self.times[self.time_indices[self.time_index]]
         else:
             self._time, self.time_index = self.time_callback(
                 self.step, self._time, self.time_index
             )
+        # this also catches the case for no time dimension
+        if self.time_index >= len(self.time_indices):
+            # for a "static reader" don't set status to finished
+            if self.time_var is not None:
+                self._status = fm.ComponentStatus.FINISHED
+            return
+
+        if self.time_callback is None:
+            self._time = self.times[self.time_indices[self.time_index]]
+
         for var in self.variables:
             if var.static:
                 continue

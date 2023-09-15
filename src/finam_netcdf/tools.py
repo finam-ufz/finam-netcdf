@@ -569,6 +569,8 @@ def extract_info(dataset, variable, current_time=None):
     ]
     order = info.get_axes_order(ax_names)
     axes_reversed = check_order_reversed(order)
+    if axes_reversed:
+        ax_names = ax_names[::-1]  # xyz order now
 
     # this needs some work with the respective grid to be created correctly
     if is_transect(order):
@@ -630,7 +632,7 @@ def extract_data(dataset, variable, time_var=None, time_index=None):
     data_var = dataset[variable.name]
     slices = variable.slices
     if not variable.static:
-        slices += {time_var: time_index}
+        slices[time_var] = time_index
     return data_var[_get_slice(data_var.dimensions, slices)]
 
 
@@ -668,7 +670,7 @@ def create_time_dim(dataset, time_var):
     return times
 
 
-def _create_nc_framework(
+def create_nc_framework(
     dataset,
     time_var,
     start_date,
@@ -679,13 +681,13 @@ def _create_nc_framework(
     global_attrs,
 ):
     """
-    Creates a NetCDF with XYZ coords data, and empties time dimension and parameter variables.
+    Creates a NetCDF file for given data.
 
     Parameters
     ----------
     dataset : netCDF4._netCDF4.Dataset
         empty NetCDF file
-    time_var : str
+    time_var : str or None
         name of the time variable
     start_date : datetime.datetime
         starting time
@@ -713,32 +715,32 @@ def _create_nc_framework(
     # adding general user input attributes if any
     dataset.setncatts(global_attrs)
 
-    # creating time dim and var
-    dataset.createDimension(time_var, None)
-    t_var = dataset.createVariable(time_var, np.float64, (time_var,))
+    if time_var is not None:
+        # creating time dim and var
+        dataset.createDimension(time_var, None)
+        t_var = dataset.createVariable(time_var, np.float64, (time_var,))
 
-    if isinstance(time_freq, str):
-        freq = time_freq
-    else:
-        freq = (
-            "days"
-            if time_freq.days != 0
-            else "hours"
-            if time_freq.seconds // 3600 != 0
-            else "minutes"
-            if (time_freq.seconds // 60) % 60 != 0
-            else "seconds"
-        )
+        if isinstance(time_freq, str):
+            freq = time_freq
+        elif time_freq.days != 0:
+            freq = "days"
+        elif time_freq.seconds // 3600 != 0:
+            freq = "hours"
+        elif (time_freq.seconds // 60) % 60 != 0:
+            freq = "minutes"
+        else:
+            freq = "seconds"
 
-    t_var.units = f"{freq} since {start_date}"
-    t_var.calendar = "standard"
+        t_var.units = f"{freq} since {start_date}"
+        t_var.calendar = "standard"
 
     for var in variables:
         grid_info = in_infos[var.io_name].grid
         for i, ax in enumerate(grid_info.axes_names):
             if ax in dataset.variables:
                 # check if existing axes is same as this one
-                if not np.allclose(dataset[ax][:], grid_info.data_axes[i]):
+                ax1, ax2 = dataset[ax][:], grid_info.data_axes[i]
+                if np.size(ax1) == np.size(ax2) and np.allclose(ax1, ax2):
                     continue
                 raise ValueError("NetCDF: can't add different axes with same name.")
             dataset.createDimension(ax, len(grid_info.data_axes[i]))
@@ -746,10 +748,10 @@ def _create_nc_framework(
             dataset[ax].setncatts(grid_info.axes_attributes[i])
             dataset[ax].setncattr("axis", "XYZ"[i])
             dataset[ax][:] = grid_info.data_axes[i]
+            # add axis bounds if data location is cells
 
-        dim = set(grid_info.axes_names)
-        if not var.static:
-            dim = (time_var,) + dim
-        ncvar = dataset.createVariable(var.name, np.float64, dim)
+        dim = (time_var,) * (not var.static) + tuple(grid_info.axes_names)
+        dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
+        ncvar = dataset.createVariable(var.name, dtype, dim)
         meta = in_infos[var.io_name].meta
         ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
