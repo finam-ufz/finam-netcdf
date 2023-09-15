@@ -30,7 +30,7 @@ sm_gen = fm.modules.CallbackGenerator(
     start=datetime(2000, 1, 1),
     step=timedelta(days=1),
 )
-writer = NetCdfPushWriter(file, inputs=["lai", "SM"], time_var="time")
+writer = NetCdfPushWriter(file, inputs=["lai", "SM"])
 
 composition = fm.Composition([lai_gen, sm_gen, writer])
 composition.initialize()
