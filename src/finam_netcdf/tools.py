@@ -658,7 +658,7 @@ def _create_point_axis(cell_axis):
 
 
 def create_time_dim(dataset, time_var):
-    """returns a list of datetime.datetime objects for a given NetCDF4 time varaible"""
+    """returns a list of datetime.datetime objects for a given NetCDF4 time variable"""
     if (
         "units" not in dataset[time_var].ncattrs()
         or "calendar" not in dataset[time_var].ncattrs()
@@ -708,16 +708,16 @@ def create_nc_framework(
     variables : list of Variable
         Variable informations.
     global_attrs : dict
-        global attributes for the NetCDF file inputed by the user
+        global attributes for the NetCDF file inputted by the user
 
     Raises
     ------
     ValueError
-        If there is a duplicated output parameter varaible.
+        If there is a duplicated output parameter variable.
     ValueError
         If the names of the XYZ coordinates do not match for all variables.
     ValueError
-        If a input coordinates not in grid_info.axes_name variables.
+        If a input coordinate is not in grid_info.axes_name variables.
     """
     # adding general user input attributes if any
     dataset.setncatts(global_attrs)
@@ -746,7 +746,14 @@ def create_nc_framework(
         if not isinstance(grid, fm.data.StructuredGrid):
             msg = f"NetCDF: {var.name} is not given on a structured grid."
             raise ValueError(msg)
-        for i, ax in enumerate(grid.axes_names):
+
+        axes_names = (
+            tuple(reversed(grid.axes_names))
+            if grid.axes_reversed
+            else tuple(grid.axes_names)
+        )
+
+        for i, ax in enumerate(axes_names):
             if ax in dataset.variables:
                 # check if existing axes is same as this one
                 ax1, ax2 = dataset[ax][:], grid.data_axes[i]
@@ -760,7 +767,7 @@ def create_nc_framework(
             dataset[ax][:] = grid.data_axes[i]
             # add axis bounds if data location is cells
 
-        dim = (time_var,) * (not var.static) + tuple(grid.axes_names)
+        dim = (time_var,) * (not var.static) + axes_names
         dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
         ncvar = dataset.createVariable(var.name, dtype, dim)
         meta = in_infos[var.io_name].meta
