@@ -138,6 +138,11 @@ ATTRS = {
 }
 
 
+def logical_eqv(a, b):
+    """Logical equivalence."""
+    return (a and b) or (not a and not b)
+
+
 def find_axis(name, dataset):
     """
     Find axis by CF-convention hints.
@@ -209,13 +214,30 @@ def check_order_reversed(order):
     ValueError
         if order is neither standard nor reversed
     """
-    if order in "xyz":
+    if order in "xyz" or order == "xz":
         return False
 
-    if order in "zyx":
+    if order in "zyx" or order == "zx":
         return True
 
     raise ValueError(f"NetCDF: axes order is neither standard nor reversed: '{order}'")
+
+
+def is_transect(order):
+    """
+    Check if axes order is defining a transect.
+
+    Parameters
+    ----------
+    order : str
+        axes order
+
+    Returns
+    -------
+    bool
+        True if axes order is "yz", "xz", "zy" or "zx"
+    """
+    return order in ["yz", "xz", "zy", "zx"]
 
 
 def _set_z_down(dataset, zvars):
@@ -315,6 +337,10 @@ class DatasetInfo:
         else:
             self.static_data = self.data
         self.temporal_data = self.data - self.static_data
+        self.data_spatial_dims_map = {
+            d: [i for i in v if i not in self.time]
+            for d, v in self.data_dims_map.items()
+        }
 
     def get_axes_order(self, dims):
         """
@@ -361,102 +387,202 @@ class DatasetInfo:
         return order
 
 
-class Layer:
+class Variable:
     """
-    Defines a NetCDF layer.
+    Specifications for a NetCDF variable.
 
     Parameters
     ----------
 
-    var : str
-        Layer variable
-    xyz : tuple of str
-        Coordinate variables in xyz order
-    fixed : dict of str, int
-        Dictionary for further, fixed index coordinate variables (e.g. 'time')
-    static : bool, optional
-        Marks this layer/outputs as static. Defaults to ``False``.
+    name : str
+        Variable name in the NetCDF file.
+    io_name : str, optional
+        Desired name of the respective Input/Output in the FINAM component.
+        Will be the variable name by default.
+    slices : dict of str, int, optional
+        Dictionary for fixed coordinate indices (e.g. {'time': 0})
+    static : bool or None, optional
+        Flag indicating static data. If None, this will be determined.
+        Writer will interprete None as False.
+        Default: None
+    **info_kwargs
+        Optional keyword arguments to instantiate an Info object (i.e. 'grid' and 'meta')
+        Used to overwrite meta data, to change units or to provide a desired grid specification.
     """
 
-    def __init__(self, var: str, xyz=("x", "y"), fixed=None, static=False):
-        self.var = var
-        self.xyz = xyz
-        self.fixed = fixed or {}
+    def __init__(self, name, io_name=None, slices=None, static=None, **info_kwargs):
+        self.name = name
+        self.io_name = io_name or name
+        self.slices = slices or {}
         self.static = static
+        self.info_kwargs = info_kwargs
+
+    def get_meta(self):
+        """Get the meta-data dictionary of this variable."""
+        meta = self.info_kwargs.get("meta", {})
+        meta.update(
+            {
+                k: v
+                for k, v in self.info_kwargs.items()
+                if k not in ["time", "grid", "meta"]
+            }
+        )
+        return meta
 
     def __repr__(self):
-        return f"Layer(var={self.var}, xyz={self.xyz}, fixed={self.fixed}, static={self.static})"
+        name, io_name, slices, static = (
+            self.name,
+            self.io_name,
+            self.slices,
+            self.static,
+        )
+        return (
+            f"Variable({name=}, {io_name=}, {slices=}, {static=}, **{self.info_kwargs})"
+        )
 
 
-def extract_layers(dataset):
+def create_variable_list(variables):
     """
-    It extracts the layer information from a dataset following CF convention.
-
+    Create a list of Variable instances.
 
     Parameters
     ----------
-    dataset : str
-        NetCDF file
+    variables : list of str or Variable
+        List containing Variable instances or names.
 
     Returns
     -------
-    tuple
-        tuple including time and Z variable names and layers information.
+    list of Variable
+        List containing only Variable instances.
+    """
+    return [var if isinstance(var, Variable) else Variable(var) for var in variables]
+
+
+def extract_variables(dataset, variables=None, only_static=False):
+    """
+    Extract the variable information from a dataset following CF convention.
+
+    Parameters
+    ----------
+    dataset : netCDF4.Dataset
+        Opened NetCDF dataset.
+    variables : list of Variable or str, optional
+        List of desired variables given by name or a :class:`Variable` instance.
+        By default, all variables present in the NetCDF file.
+    only_static : bool, optional
+        Only provide static variables, or variables with a fixed time slice.
+        Default: False
+
+    Returns
+    -------
+    variables : list of Variable
+        Variables information.
     """
 
-    layers = []
-    data_info = DatasetInfo(dataset)
-    variables = data_info.data_dims_map
-    time_var = data_info.time
-    time_var = None if not time_var else time_var.pop()
+    info = DatasetInfo(dataset)
+    if variables is None:
+        variables = create_variable_list(info.static_data if only_static else info.data)
+    else:
+        variables = create_variable_list(variables)
 
-    # extracting names of coordinates XYZ
-    for var, dims in variables.items():
-        static = var in data_info.static_data
-        xyz = tuple(value for value in dims if value != time_var)
-        order = data_info.get_axes_order(xyz)
-        axes_reversed = check_order_reversed(order)
-        if axes_reversed:
-            xyz = xyz[::-1]
+    # check if all variables are present
+    if not set(v.name for v in variables) <= info.data:
+        miss = set(v.name for v in variables) - info.data
+        msg = f"NetCDF: some variables are not present in the file: {miss}"
+        raise ValueError(msg)
 
-        layers.append(Layer(var, xyz, static=static))
+    # check for static data
+    tname = None if info.all_static else next(iter(info.time))
+    for var in variables:
+        if info.all_static:
+            if var.static is not None and not var.static:
+                msg = f"NetCDF: Variable wasn't flagged static but is: {var.name}"
+                raise ValueError(msg)
+            var.static = True
+        else:
+            static = var.name in info.static_data or tname in var.slices
+            if var.static is not None and not logical_eqv(var.static, static):
+                msg = f"NetCDF: Variable has a wrong static flag: {var.name}"
+            var.static = static
+    if only_static and not info.all_static:
+        if not all(var.static for var in variables):
+            temp = [var.name for var in variables if not var.static]
+            msg = f"NetCDF: Some variables are not static but should: {temp}"
+            raise ValueError(msg)
 
-    return time_var, layers
+    # check if all variables have correct dims and slices
+    for var in variables:
+        slice_dims = set(var.slices)
+        all_dims = set(info.data_dims_map[var.name])
+        if not slice_dims <= all_dims:
+            miss = slice_dims - all_dims
+            msg = f"NetCDF: Variable {var.name} doesn't have required dimensions for slicing: {miss}"
+            raise ValueError(msg)
+        if (
+            var.name not in info.data_with_all_coords
+            and not all_dims - slice_dims <= info.coords
+        ):
+            miss = all_dims - slice_dims - info.coords
+            msg = f"NetCDF: Variable {var.name} misses coordinates: {miss}."
+            raise ValueError(msg)
+    return variables
 
 
-def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=None):
-    """Extracts a 2D data array from a dataset
+def extract_time(dataset):
+    """
+    Extract the time coordinate name from a dataset following CF convention.
+
+    Parameters
+    ----------
+    dataset : netCDF4.Dataset
+        Opened NetCDF dataset.
+
+    Returns
+    -------
+    time : str or None
+        Name of time coordinate if present.
+    """
+    info = DatasetInfo(dataset)
+    return None if info.all_static else next(iter(info.time))
+
+
+def extract_info(dataset, variable, current_time=None):
+    """Extracts the Info object for the selected variable.
 
     Parameters
     ----------
     dataset : netCDF4.DataSet
         The input dataset
-    layer : Layer
-        The layer definition
-    time_index : int, optional
-        index of current time
-    time_var: str, optional
-        Time variable string
-    current_time: datetime.datetime
-        (YYYY, M, D, H, S)
+    variable : Variable
+        The variable definition
+    current_time : datetime.datetime or None
+        Current time for the Info object.
     """
 
-    data_info = DatasetInfo(dataset)
-    data_var = dataset[layer.var]
+    info = DatasetInfo(dataset)
+    data_var = dataset[variable.name]
 
     # storing attributes of data_var in meta dict
     meta = {name: data_var.getncattr(name) for name in data_var.ncattrs()}
 
-    # gets the data for each time step as np.array if time is not None
-    if isinstance(time_index, int):
-        data_var = data_var[time_index, ...]
-
     # checks if axes were reversed or not
-    order = data_info.get_axes_order(data_info.data_dims_map[layer.var])
+    ax_names = [
+        ax
+        for ax in info.data_spatial_dims_map[variable.name]
+        if ax not in variable.slices
+    ]
+    order = info.get_axes_order(ax_names)
     axes_reversed = check_order_reversed(order)
+    if axes_reversed:
+        ax_names = ax_names[::-1]  # xyz order now
+
+    # this needs some work with the respective grid to be created correctly
+    if is_transect(order):
+        msg = f"NetCDF: {order} transect slices are not supported at the moment."
+        raise ValueError(msg)
 
     # getting coordinates data
-    axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in layer.xyz]
+    axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
     # _FillValue and missing_value not allowed for coordinates
     axes_attrs = [
         {
@@ -464,29 +590,65 @@ def extract_grid(dataset, layer, time_index=None, time_var=None, current_time=No
             for name in dataset.variables[ax].ncattrs()
             if name not in ["_FillValue", "missing_value"]
         }
-        for ax in layer.xyz
+        for ax in ax_names
     ]
+    if "grid" in variable.info_kwargs:
+        # use provided grid from variable object if present
+        grid = variable.info_kwargs["grid"]
+    else:
+        # note: we use point-associated data here.
+        grid = fm.RectilinearGrid(
+            axes=[_create_point_axis(ax) for ax in axes],
+            axes_names=ax_names,
+            data_location=fm.Location.CELLS,
+            axes_reversed=axes_reversed,
+            axes_attributes=axes_attrs,
+        )
 
-    # note: we use point-associated data here.
-    grid = fm.RectilinearGrid(
-        axes=[create_point_axis(ax) for ax in axes],
-        axes_names=layer.xyz,
-        data_location=fm.Location.CELLS,
-        axes_reversed=axes_reversed,
-        axes_attributes=axes_attrs,
-    )
+    # update with provided meta from variable object
+    add_meta = variable.get_meta()
+    if "units" in meta and "units" in add_meta:
+        u1, u2 = meta["units"], add_meta["units"]
+        if not fm.data.tools.equivalent_units(u1, u2):
+            name = variable.name
+            msg = f"NetCDF: {name} was provided with different units: {u1}, {u2}"
+            raise ValueError(msg)
+    meta.update()
 
-    # getting current time
-    times = None
-    if not layer.static and time_var in dataset.dimensions:
-        times = current_time
-
-    info = fm.Info(time=times, grid=grid, meta=meta)
-
-    return info, fm.UNITS.Quantity(data_var, info.units)
+    return fm.Info(time=current_time, grid=grid, meta=meta)
 
 
-def create_point_axis(cell_axis):
+def extract_data(dataset, variable, time_var=None, time_index=None):
+    """Extracts the Info object for the selected variable.
+
+    Parameters
+    ----------
+    dataset : netCDF4.DataSet
+        The input dataset
+    variable : Variable
+        The variable definition
+    time_var : str or None
+        Name of time coordinate if present.
+    time_index : int or None
+        Selected time index if data is not static.
+
+    Returns
+    -------
+    data : numpy.ndarray or numpy.ma.MaskedArray
+        The data slice.
+    """
+    data_var = dataset[variable.name]
+    slices = variable.slices
+    if not variable.static:
+        slices[time_var] = time_index
+    return data_var[_get_slice(data_var.dimensions, slices)]
+
+
+def _get_slice(dims, slices):
+    return tuple(slices.get(d, slice(None)) for d in dims)
+
+
+def _create_point_axis(cell_axis):
     """Create a point axis from a cell axis"""
     diffs = np.diff(cell_axis)
     mid = cell_axis[:-1] + diffs / 2
@@ -496,13 +658,13 @@ def create_point_axis(cell_axis):
 
 
 def create_time_dim(dataset, time_var):
-    """returns a list of datetime.datetime objects for a given NetCDF4 time varaible"""
+    """returns a list of datetime.datetime objects for a given NetCDF4 time variable"""
     if (
         "units" not in dataset[time_var].ncattrs()
         or "calendar" not in dataset[time_var].ncattrs()
     ):
         raise AttributeError(
-            f"Variable {time_var} must have 'calendar' and 'units' atribbutes!"
+            f"Variable {time_var} must have 'calendar' and 'units' attributes."
         )
 
     nctime = dataset[time_var][:]
@@ -514,3 +676,99 @@ def create_time_dim(dataset, time_var):
     times = np.array(times).astype("datetime64[ns]")
     times = times.astype("datetime64[s]").tolist()
     return times
+
+
+def create_nc_framework(
+    dataset,
+    time_var,
+    start_date,
+    time_freq,
+    in_infos,
+    in_data,
+    variables,
+    global_attrs,
+):
+    """
+    Creates a NetCDF file for given data.
+
+    Parameters
+    ----------
+    dataset : netCDF4._netCDF4.Dataset
+        empty NetCDF file
+    time_var : str or None
+        name of the time variable
+    start_date : datetime.datetime
+        starting time
+    time_freq : datetime.datetime | str
+        time stepping
+    in_infos : dict
+        grid data and units for each output variable
+    in_data : dict
+        array data and units for each output variable
+    variables : list of Variable
+        Variable informations.
+    global_attrs : dict
+        global attributes for the NetCDF file inputted by the user
+
+    Raises
+    ------
+    ValueError
+        If there is a duplicated output parameter variable.
+    ValueError
+        If the names of the XYZ coordinates do not match for all variables.
+    ValueError
+        If a input coordinate is not in grid_info.axes_name variables.
+    """
+    # adding general user input attributes if any
+    dataset.setncatts(global_attrs)
+
+    if time_var is not None:
+        # creating time dim and var
+        dataset.createDimension(time_var, None)
+        t_var = dataset.createVariable(time_var, np.float64, (time_var,))
+
+        if isinstance(time_freq, str):
+            freq = time_freq
+        elif time_freq.days != 0:
+            freq = "days"
+        elif time_freq.seconds // 3600 != 0:
+            freq = "hours"
+        elif (time_freq.seconds // 60) % 60 != 0:
+            freq = "minutes"
+        else:
+            freq = "seconds"
+
+        t_var.units = f"{freq} since {start_date}"
+        t_var.calendar = "standard"
+
+    for var in variables:
+        grid = in_infos[var.io_name].grid
+        if not isinstance(grid, fm.data.StructuredGrid):
+            msg = f"NetCDF: {var.name} is not given on a structured grid."
+            raise ValueError(msg)
+
+        axes_names = (
+            tuple(reversed(grid.axes_names))
+            if grid.axes_reversed
+            else tuple(grid.axes_names)
+        )
+
+        for i, ax in enumerate(axes_names):
+            if ax in dataset.variables:
+                # check if existing axes is same as this one
+                ax1, ax2 = dataset[ax][:], grid.data_axes[i]
+                if np.size(ax1) == np.size(ax2) and np.allclose(ax1, ax2):
+                    continue
+                raise ValueError("NetCDF: can't add different axes with same name.")
+            dataset.createDimension(ax, len(grid.data_axes[i]))
+            dataset.createVariable(ax, grid.data_axes[i].dtype, (ax,))
+            dataset[ax].setncatts(grid.axes_attributes[i])
+            dataset[ax].setncattr("axis", "XYZ"[i])
+            dataset[ax][:] = grid.data_axes[i]
+            # add axis bounds if data location is cells
+
+        dim = (time_var,) * (not var.static) + axes_names
+        dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
+        ncvar = dataset.createVariable(var.name, dtype, dim)
+        meta = in_infos[var.io_name].meta
+        ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})

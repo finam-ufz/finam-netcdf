@@ -1,16 +1,13 @@
 """
 NetCDF writer components.
 """
-from __future__ import annotations
-
 from datetime import datetime, timedelta
 from functools import partial
 
 import finam as fm
-import numpy as np
 from netCDF4 import Dataset, date2num
 
-from .tools import Layer
+from .tools import create_nc_framework, create_variable_list
 
 
 class NetCdfTimedWriter(fm.TimeComponent):
@@ -21,19 +18,11 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     .. testcode:: constructor
 
-       from datetime import datetime, timedelta
-       from finam_netcdf import Layer, NetCdfTimedWriter
+       from datetime import timedelta
+       from finam_netcdf import NetCdfTimedWriter
 
        file = "tests/data/out.nc"
-       writer = NetCdfTimedWriter(
-            path=file,
-            inputs={
-                "LAI": Layer(var="lai", xyz=("lon", "lat")),
-                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
-            },
-            time_var="time",
-            step=timedelta(days=1),
-       )
+       writer = NetCdfTimedWriter(file, ["lai", "soil_moist"], step=timedelta(days=1))
 
     .. testcode:: constructor
         :hide:
@@ -45,27 +34,24 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
     path : str
         Path to the NetCDF file to read.
-    inputs : dict of str, Layer
-        Dictionary of inputs. Keys are input names, values are :class:`.Layer` objects.
-    time_var : str
-        Name of the time coordinate.
+    inputs : list of str or Variable.
+        List of inputs. Input is either defined by name or a :class:`Variable` instance.
     step : datetime.timedelta
         Time step
+    time_var : str or None, optional
+        Name of the time coordinate. To create a static output file, set this to None.
+        By default: "time"
     global_attrs : dict, optional
-            global attributes for the NetCDF file inputed by the user.
-    inputs_units : dict, optional
-        Dictionary of inputs units.
-        Keys are input names, values are None (taken from input) or a valid pint Unit input.
+        global attributes for the NetCDF file inputed by the user.
     """
 
     def __init__(
         self,
-        path: str,
-        inputs: dict[str, Layer],
-        time_var: str,
-        step: timedelta,
+        path,
+        inputs,
+        step,
+        time_var="time",
         global_attrs=None,
-        inputs_units=None,
     ):
         super().__init__()
 
@@ -73,11 +59,13 @@ class NetCdfTimedWriter(fm.TimeComponent):
             raise ValueError("Step must be None or of type timedelta")
 
         self._path = path
-        self._input_dict = inputs
-        self._input_names = {v.var: k for k, v in inputs.items()}
-        self._units = inputs_units or {}
-        for name in self._input_dict:
-            self._units.setdefault(name)
+        self.variables = create_variable_list(inputs)
+        for var in self.variables:
+            if var.static is None:
+                var.static = not bool(time_var)
+            if var.slices:
+                msg = f"NetCDF: writer got slices information for variable: f{var.name}"
+                raise ValueError(msg)
         self._step = step
         self.time_var = time_var
         self.global_attrs = global_attrs or {}
@@ -93,12 +81,21 @@ class NetCdfTimedWriter(fm.TimeComponent):
         return self.time + self._step
 
     def _initialize(self):
-        for inp in self._input_dict.keys():
-            self.inputs.add(name=inp, time=self.time, grid=None, units=self._units[inp])
+        for var in self.variables:
+            grid = var.info_kwargs.get("grid", None)
+            units = var.info_kwargs.get("units", None)
+            self.inputs.add(
+                name=var.io_name,
+                time=self.time,
+                grid=grid,
+                units=units,
+                static=var.static,
+                **var.get_meta(),
+            )
 
         self.dataset = Dataset(self._path, "w")
 
-        self.create_connector(pull_data=list(self._input_dict.keys()))
+        self.create_connector(pull_data=[var.io_name for var in self.variables])
 
     def _connect(self, start_time):
         self.try_connect(start_time=start_time)
@@ -106,22 +103,25 @@ class NetCdfTimedWriter(fm.TimeComponent):
             return
 
         self._time = start_time
-        _create_nc_framework(
+        create_nc_framework(
             self.dataset,
             self.time_var,
             self._time,
             self._step,
             self.connector.in_infos,
             self.connector.in_data,
-            self._input_dict,
+            self.variables,
             self.global_attrs,
         )
 
         # adding time and var data to the first timestamp
-        for key_name in self._input_dict:
-            var_name = self._input_dict[key_name].var
-            data = self.connector.in_data[key_name].magnitude
-            self.dataset[var_name][self.timestamp_counter, ...] = data
+        for var in self.variables:
+            data = self.connector.in_data[var.io_name].magnitude
+            if var.static:
+                self.dataset[var.name][...] = data
+            else:
+                self.dataset[var.name][self.timestamp_counter, ...] = data
+        if self.time_var:
             current_date = date2num(self._time, self.dataset[self.time_var].units)
             self.dataset[self.time_var][self.timestamp_counter] = current_date
 
@@ -131,12 +131,18 @@ class NetCdfTimedWriter(fm.TimeComponent):
     def _update(self):
         self._time += self._step
         self.timestamp_counter += 1
-        for key_name, inp in self.inputs.items():
-            var_name = self._input_dict[key_name].var
-            data = inp.pull_data(self._time).magnitude
-            self.dataset[var_name][self.timestamp_counter, ...] = data
-            current_date = date2num(self._time, self.dataset[self.time_var].units)
-            self.dataset[self.time_var][self.timestamp_counter] = current_date
+
+        if not self.time_var:
+            return
+
+        for var in self.variables:
+            if var.static:
+                continue
+            data = self.inputs[var.io_name].pull_data(self._time).magnitude
+            self.dataset[var.name][self.timestamp_counter, ...] = data
+
+        current_date = date2num(self._time, self.dataset[self.time_var].units)
+        self.dataset[self.time_var][self.timestamp_counter] = current_date
 
     def _finalize(self):
         self.dataset.close()
@@ -150,17 +156,10 @@ class NetCdfPushWriter(fm.Component):
 
     .. testcode:: constructor
 
-       from finam_netcdf import Layer, NetCdfPushWriter
+       from finam_netcdf import NetCdfPushWriter
 
        file = "tests/data/out.nc"
-       writer = NetCdfPushWriter(
-            path=file,
-            inputs={
-                "LAI": Layer(var="lai", xyz=("lon", "lat")),
-                "SM": Layer(var="soil_moisture", xyz=("lon", "lat")),
-            },
-            time_var="time",
-       )
+       writer = NetCdfPushWriter(file, ["lai", "soil_moisture"])
 
     .. testcode:: constructor
         :hide:
@@ -174,36 +173,37 @@ class NetCdfPushWriter(fm.Component):
 
     path : str
         Path to the NetCDF file to read.
-    inputs : dict of str, Layer
-        Dictionary of inputs. Keys are input names, values are :class:`.Layer` objects.
+    inputs : list of str or Variable.
+        List of inputs. Input is either defined by name or a :class:`Variable` instance.
     time_var : str
         Name of the time coordinate.
     time_unit : str, optional
         time unit given as a string: days, hours, minutes or seconds.
     global_attrs : dict, optional
             global attributes for the NetCDF file inputed by the user.
-    inputs_units : dict, optional
-        Dictionary of inputs units.
-        Keys are input names, values are None (taken from input) or a valid pint Unit input.
     """
 
     def __init__(
         self,
-        path: str,
-        inputs: dict[str, Layer],
-        time_var: str,
-        time_unit: str = "seconds",
+        path,
+        inputs,
+        time_var="time",
+        time_unit="seconds",
         global_attrs=None,
-        inputs_units=None,
     ):
         super().__init__()
 
         self._path = path
-        self._input_dict = inputs
-        self._input_names = {v.var: k for k, v in inputs.items()}
-        self._units = inputs_units or {}
-        for name in self._input_dict:
-            self._units.setdefault(name)
+        self.variables = create_variable_list(inputs)
+        for var in self.variables:
+            if var.static is None:
+                var.static = False
+            if var.static:
+                msg = f"NetCDF: push writer got a static input: f{var.name}"
+                raise ValueError(msg)
+            if var.slices:
+                msg = f"NetCDF: writer got slices information for variable: f{var.name}"
+                raise ValueError(msg)
         self.time_var = time_var
         self.dataset = None
         self.timestamp_counter = 0
@@ -212,27 +212,29 @@ class NetCdfPushWriter(fm.Component):
         self.last_update = None
 
         if not isinstance(self.global_attrs, dict):
-            raise ValueError("inputed global attributes must be of type dict")
+            raise ValueError("Given global attributes must be of type dict.")
 
-        self.all_inputs = set(inputs.keys())
+        self.all_inputs = set(var.io_name for var in self.variables)
         self.pushed_inputs = set()
 
         self._status = fm.ComponentStatus.CREATED
 
     def _initialize(self):
-        for inp in self._input_dict.keys():
+        for var in self.variables:
+            grid = var.info_kwargs.get("grid", None)
+            units = var.info_kwargs.get("units", None)
             self.inputs.add(
                 io=fm.CallbackInput(
-                    name=inp,
-                    callback=partial(self._data_changed, inp),
+                    name=var.io_name,
+                    callback=partial(self._data_changed, var.io_name),
                     time=None,
-                    grid=None,
-                    units=self._units[inp],
+                    grid=grid,
+                    units=units,
+                    **var.get_meta(),
                 )
             )
         self.dataset = Dataset(self._path, "w")
-
-        self.create_connector(pull_data=list(self._input_dict.keys()))
+        self.create_connector(pull_data=[var.io_name for var in self.variables])
 
     def _connect(self, start_time):
         self.try_connect(start_time)
@@ -240,14 +242,14 @@ class NetCdfPushWriter(fm.Component):
         if self.status != fm.ComponentStatus.CONNECTED:
             return
 
-        _create_nc_framework(
+        create_nc_framework(
             self.dataset,
             self.time_var,
             start_time,
             self.time_unit,
             self.connector.in_infos,
             self.connector.in_data,
-            self._input_dict,
+            self.variables,
             self.global_attrs,
         )
 
@@ -255,10 +257,9 @@ class NetCdfPushWriter(fm.Component):
         self.dataset[self.time_var][self.timestamp_counter] = current_date
 
         # adding time and var data to the first timestamp
-        for key_name in self._input_dict:
-            var_name = self._input_dict[key_name].var
-            data = self.connector.in_data[key_name].magnitude
-            self.dataset[var_name][self.timestamp_counter, ...] = data
+        for var in self.variables:
+            data = self.connector.in_data[var.io_name].magnitude
+            self.dataset[var.name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
@@ -300,119 +301,12 @@ class NetCdfPushWriter(fm.Component):
         current_time = date2num(time, self.dataset[self.time_var].units)
         self.dataset[self.time_var][self.timestamp_counter] = current_time
 
-        for n, layer in self._input_dict.items():
-            data = self.inputs[n].pull_data(time).magnitude
-            self.dataset[layer.var][self.timestamp_counter, ...] = data
+        for var in self.variables:
+            data = self.inputs[var.io_name].pull_data(time).magnitude
+            self.dataset[var.name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
         self.pushed_inputs.clear()
 
         self.update()
-
-
-def _create_nc_framework(
-    dataset,
-    time_var,
-    start_date,
-    time_freq,
-    in_infos,
-    in_data,
-    layers,
-    global_attrs,
-):
-    """
-    creates a NetCDF with XYZ coords data, and empties time dimension and parameter variables.
-
-        Parameters
-        ----------
-        dataset : netCDF4._netCDF4.Dataset
-            empty NetCDF file
-        time_var : str
-            name of the time variable
-        start_date : datetime.datetime
-            starting time
-        time_freq : datetime.datetime | str
-            time stepping
-        in_infos : dict
-            grid data and units for each output variable
-        in_data : dict
-            array data and units for each output variable
-        layers : list
-            Layer information for each variable:
-            Layer(var=--, xyz=(--, --, --), fixed={--}, static=--))
-        global_attrs : dict
-            global attributes for the NetCDF file inputed by the user
-
-        Raises
-        ------
-        ValueError
-            If there is a duplicated output parameter varaible.
-        ValueError
-            If the names of the XYZ coordinates do not match for all variables.
-        ValueError
-            If a input coordinates not in grid_info.axes_name variables.
-    """
-    coordinates = []
-    variables = []
-    for parameter in in_data:
-        layer = layers[parameter]
-        if layer.var in variables:
-            raise ValueError(f"Duplicated variable {layer.var}.")
-        coordinates.append(layer.xyz)
-        variables.append(layer.var)
-
-    equal_layers = True
-    for l in coordinates:
-        if coordinates[0] != l:
-            equal_layers = False
-            break
-    if not equal_layers:
-        raise ValueError(
-            f"NetCdfTimedWriter Inputs {variables} have different layers: {coordinates}."
-        )
-
-    # adding general user input attributes if any
-    dataset.setncatts(global_attrs)
-
-    # creating time dim and var
-    dataset.createDimension(time_var, None)
-    t_var = dataset.createVariable(time_var, np.float64, (time_var,))
-
-    if isinstance(time_freq, str):
-        freq = time_freq
-    else:
-        freq = (
-            "days"
-            if time_freq.days != 0
-            else "hours"
-            if time_freq.seconds // 3600 != 0
-            else "minutes"
-            if (time_freq.seconds // 60) % 60 != 0
-            else "seconds"
-        )
-
-    t_var.units = f"{freq} since {start_date}"
-    t_var.calendar = "standard"
-
-    # creating xyz dim and var | all var have the same ordered layer.xyz & data coords
-    name = next(iter(in_infos))  # gets the first key output parameter name
-    grid_info = in_infos[name].grid  # same for all outputs
-    for i, ax in enumerate(layer.xyz):
-        if ax not in grid_info.axes_names:
-            raise ValueError(
-                f"Coordinate {i} '{ax}' is not in the data for input {name}. "
-                f"Available axes are {grid_info.axes_names}"
-            )
-        dataset.createDimension(ax, len(grid_info.data_axes[i]))
-        dataset.createVariable(ax, grid_info.data_axes[i].dtype, (ax,))
-        dataset[ax].setncatts(grid_info.axes_attributes[i])
-        dataset[ax].setncattr("axis", "XYZ"[i])
-        dataset[ax][:] = grid_info.data_axes[i]
-
-    # creating parameter variables
-    for parameter in in_data:
-        dim = (time_var,) + coordinates[0]  # time plus existing coords
-        var = dataset.createVariable(layers[parameter].var, np.float64, dim)
-        meta = in_infos[parameter].meta
-        var.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})

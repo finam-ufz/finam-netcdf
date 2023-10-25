@@ -33,10 +33,10 @@ Tools
    :toctree: generated
    :caption: Tools
 
-    Layer
+    Variable
 """
 from .reader import NetCdfReader, NetCdfStaticReader
-from .tools import Layer
+from .tools import Variable
 from .writer import NetCdfPushWriter, NetCdfTimedWriter
 
 try:
@@ -50,5 +50,5 @@ __all__ = [
     "NetCdfReader",
     "NetCdfPushWriter",
     "NetCdfTimedWriter",
-    "Layer",
+    "Variable",
 ]
