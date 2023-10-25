@@ -10,7 +10,6 @@ from finam.modules.generators import CallbackGenerator
 from netCDF4 import Dataset
 
 from finam_netcdf import NetCdfPushWriter, NetCdfTimedWriter
-from finam_netcdf.tools import Layer
 
 
 def generate_grid(grid):
@@ -53,11 +52,7 @@ class TestWriter(unittest.TestCase):
 
             writer = NetCdfTimedWriter(
                 path=file,
-                inputs={
-                    "LAI": Layer(var="lai", xyz=("x", "y")),
-                    "LAI2": Layer(var="lai2", xyz=("x", "y")),
-                },
-                time_var="time",
+                inputs=["lai", "lai2"],
                 step=timedelta(days=1),
                 global_attrs=global_attrs,
             )
@@ -65,8 +60,8 @@ class TestWriter(unittest.TestCase):
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
-            _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
+            source1.outputs["Grid"] >> writer.inputs["lai"]
+            source2.outputs["Grid"] >> writer.inputs["lai2"]
 
             composition.run(end_time=datetime(2000, 1, 31))
 
@@ -74,10 +69,7 @@ class TestWriter(unittest.TestCase):
             dataset = Dataset(file)
 
             lai = dataset["lai"]
-
-            dims = []
-            for dim in lai.dimensions:
-                dims.append(dim)
+            dims = list(lai.dimensions)
 
             self.assertEqual(dims, ["time", "x", "y"])
             self.assertEqual(lai.shape, (31, 10, 5))
@@ -107,20 +99,13 @@ class TestWriter(unittest.TestCase):
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
-            writer = NetCdfPushWriter(
-                path=file,
-                inputs={
-                    "LAI": Layer(var="lai", xyz=("x", "y")),
-                    "LAI2": Layer(var="lai2", xyz=("x", "y")),
-                },
-                time_var="time",
-            )
+            writer = NetCdfPushWriter(path=file, inputs=["lai", "lai2"])
 
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["LAI"]
-            _ = source2.outputs["Grid"] >> writer.inputs["LAI2"]
+            source1.outputs["Grid"] >> writer.inputs["lai"]
+            source2.outputs["Grid"] >> writer.inputs["lai2"]
 
             composition.run(end_time=datetime(2000, 1, 31))
 
@@ -156,20 +141,17 @@ class TestWriter(unittest.TestCase):
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=2),
             )
-            writer = NetCdfPushWriter(
-                path=file,
-                inputs={
-                    "lai": Layer(var="lai", xyz=("x", "y")),
-                    "lai2": Layer(var="lai2", xyz=("x", "y")),
-                },
-                time_var="time",
-            )
+            writer = NetCdfPushWriter(path=file, inputs=["lai", "lai2"])
 
             composition = Composition([source1, source2, writer])
             composition.initialize()
 
-            _ = source1.outputs["Grid"] >> writer.inputs["lai"]
-            _ = source2.outputs["Grid"] >> writer.inputs["lai2"]
+            source1.outputs["Grid"] >> writer.inputs["lai"]
+            source2.outputs["Grid"] >> writer.inputs["lai2"]
 
             with self.assertRaises(ValueError):
                 composition.run(end_time=datetime(2000, 1, 31))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -107,6 +107,7 @@ tags
 
 # own stuff
 info/
+.vscode/
 
 # Cython generated C code
 *.c
