@@ -8,7 +8,7 @@ import datetime
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "finam_plot"
+project = "finam-netcdf"
 copyright = f"2021 - {datetime.datetime.now().year}, Team LandTECH"
 author = "FINAM Developers"
 
