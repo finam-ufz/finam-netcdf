@@ -15,7 +15,7 @@ Installation:
 
 .. code-block:: bash
 
-    pip install git+https://git.ufz.de/FINAM/finam-netcdf.git
+    pip install finam-netcdf
 
 For available components, see the :doc:`api/index`.
 
