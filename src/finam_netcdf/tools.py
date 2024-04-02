@@ -1,4 +1,5 @@
 """NetCDF helper classes and functions"""
+
 # pylint: disable=R0902
 import fnmatch
 
@@ -740,6 +741,11 @@ def create_nc_framework(
 
         t_var.units = f"{freq} since {start_date}"
         t_var.calendar = "standard"
+    else:
+        non_static = [var.name for var in variables if not var.static]
+        if any(non_static):
+            msg = f"NetCDF: dataset has no time but some variables are not static: {non_static}"
+            raise ValueError(msg)
 
     for var in variables:
         grid = in_infos[var.io_name].grid

@@ -1,6 +1,7 @@
 """
 NetCDF writer components.
 """
+
 from datetime import datetime, timedelta
 from functools import partial
 
@@ -143,6 +144,108 @@ class NetCdfTimedWriter(fm.TimeComponent):
 
         current_date = date2num(self._time, self.dataset[self.time_var].units)
         self.dataset[self.time_var][self.timestamp_counter] = current_date
+
+    def _finalize(self):
+        self.dataset.close()
+
+
+class NetCdfStaticWriter(fm.Component):
+    """
+    NetCDF writer component for static inputs.
+
+    Usage:
+
+    .. testcode:: constructor
+
+       from finam_netcdf import NetCdfStaticWriter
+
+       file = "tests/data/out.nc"
+       writer = NetCdfTimedWriter(file, ["lai"])
+
+    .. testcode:: constructor
+        :hide:
+
+        writer.initialize()
+
+    Parameters
+    ----------
+
+    path : str
+        Path to the NetCDF file to read.
+    inputs : list of str or Variable.
+        List of inputs. Input is either defined by name or a :class:`Variable` instance.
+    global_attrs : dict, optional
+        global attributes for the NetCDF file inputed by the user.
+    """
+
+    def __init__(
+        self,
+        path,
+        inputs,
+        global_attrs=None,
+    ):
+        super().__init__()
+
+        self._path = path
+        self.variables = create_variable_list(inputs)
+        for var in self.variables:
+            if var.static is None:
+                var.static = True
+            elif not var.static:
+                msg = f"NetCDF: static writer got non static variable: f{var.name}"
+                raise ValueError(msg)
+            if var.slices:
+                msg = f"NetCDF: writer got slices information for variable: f{var.name}"
+                raise ValueError(msg)
+        self.global_attrs = global_attrs or {}
+        self.dataset = None
+        self.status = fm.ComponentStatus.CREATED
+
+        if not isinstance(self.global_attrs, dict):
+            raise ValueError("inputed global attributes must be of type dict")
+
+    def _initialize(self):
+        for var in self.variables:
+            grid = var.info_kwargs.get("grid", None)
+            units = var.info_kwargs.get("units", None)
+            self.inputs.add(
+                name=var.io_name,
+                time=None,
+                grid=grid,
+                units=units,
+                static=var.static,
+                **var.get_meta(),
+            )
+
+        self.dataset = Dataset(self._path, "w")
+
+        self.create_connector(pull_data=[var.io_name for var in self.variables])
+
+    def _connect(self, start_time):
+        self.try_connect(start_time=start_time)
+        if self.status != fm.ComponentStatus.CONNECTED:
+            return
+
+        create_nc_framework(
+            self.dataset,
+            None,
+            None,
+            None,
+            self.connector.in_infos,
+            self.connector.in_data,
+            self.variables,
+            self.global_attrs,
+        )
+
+        # adding time and var data to the first timestamp
+        for var in self.variables:
+            self.dataset[var.name][...] = self.connector.in_data[var.io_name].magnitude
+
+    def _validate(self):
+        pass
+
+    def _update(self):
+        pass
 
     def _finalize(self):
         self.dataset.close()

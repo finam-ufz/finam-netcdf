@@ -1,6 +1,7 @@
 """
 NetCDF reader components.
 """
+
 from __future__ import annotations
 
 import finam as fm
