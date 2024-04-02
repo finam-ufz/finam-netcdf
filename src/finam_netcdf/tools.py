@@ -681,12 +681,12 @@ def create_time_dim(dataset, time_var, time_location=None):
             raise ValueError(msg)
         rawtime = dataset[time_var][:]
         if len(rawtime) < 2:
-            msg = f"NetCDF: Time axis needs at least two time points to use time_location feature."
+            msg = "NetCDF: Time axis needs at least two time points to use time_location feature."
             raise ValueError(msg)
         diffs = rawtime[1:] - rawtime[:-1]
         diff = diffs[0]
         if not np.allclose(diffs, diff):
-            msg = f"NetCDF: Time axis needs to be uniform to use time_location feature."
+            msg = "NetCDF: Time axis needs to be uniform to use time_location feature."
             raise ValueError(msg)
         nctime = rawtime + (1 - time_location) * diff
 
