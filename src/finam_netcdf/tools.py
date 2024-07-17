@@ -1,4 +1,5 @@
 """NetCDF helper classes and functions"""
+
 # pylint: disable=R0902
 import fnmatch
 
@@ -613,7 +614,7 @@ def extract_info(dataset, variable, current_time=None):
             name = variable.name
             msg = f"NetCDF: {name} was provided with different units: {u1}, {u2}"
             raise ValueError(msg)
-    meta.update()
+    meta.update(add_meta)
 
     return fm.Info(time=current_time, grid=grid, meta=meta)
 
