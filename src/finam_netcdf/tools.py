@@ -658,17 +658,38 @@ def _create_point_axis(cell_axis):
     return np.concatenate(([first], mid, [last]))
 
 
-def create_time_dim(dataset, time_var):
+def create_time_dim(dataset, time_var, time_location=None):
     """returns a list of datetime.datetime objects for a given NetCDF4 time variable"""
     if (
         "units" not in dataset[time_var].ncattrs()
         or "calendar" not in dataset[time_var].ncattrs()
     ):
-        raise AttributeError(
-            f"Variable {time_var} must have 'calendar' and 'units' attributes."
+        msg = (
+            f"NetCDF: Variable {time_var} must have 'calendar' and 'units' attributes."
         )
+        raise AttributeError(msg)
 
-    nctime = dataset[time_var][:]
+    if "bounds" in dataset[time_var].ncattrs():
+        # always use end of respective time-frame as output time if bounds given
+        nctime = dataset[dataset[time_var].bounds][:, 2]
+    elif time_location is None or np.isclose(time_location, 1):
+        # assume given time stamp *is* the end of respective time-frame
+        nctime = dataset[time_var][:]
+    else:
+        if time_location < 0 or time_location > 1:
+            msg = f"NetCDF: given {time_location=} out of bounds. Should be in [0, 1]."
+            raise ValueError(msg)
+        rawtime = dataset[time_var][:]
+        if len(rawtime) < 2:
+            msg = "NetCDF: Time axis needs at least two time points to use time_location feature."
+            raise ValueError(msg)
+        diffs = rawtime[1:] - rawtime[:-1]
+        diff = diffs[0]
+        if not np.allclose(diffs, diff):
+            msg = "NetCDF: Time axis needs to be uniform to use time_location feature."
+            raise ValueError(msg)
+        nctime = rawtime + (1 - time_location) * diff
+
     time_cal = dataset[time_var].calendar
     time_unit = dataset.variables[time_var].units
     times = num2date(
@@ -741,6 +762,11 @@ def create_nc_framework(
 
         t_var.units = f"{freq} since {start_date}"
         t_var.calendar = "standard"
+    else:
+        non_static = [var.name for var in variables if not var.static]
+        if any(non_static):
+            msg = f"NetCDF: dataset has no time but some variables are not static: {non_static}"
+            raise ValueError(msg)
 
     for var in variables:
         grid = in_infos[var.io_name].grid

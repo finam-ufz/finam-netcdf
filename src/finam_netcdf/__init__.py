@@ -38,7 +38,7 @@ Tools
 
 from .reader import NetCdfReader, NetCdfStaticReader
 from .tools import Variable
-from .writer import NetCdfPushWriter, NetCdfTimedWriter
+from .writer import NetCdfPushWriter, NetCdfStaticWriter, NetCdfTimedWriter
 
 try:
     from ._version import __version__
@@ -51,5 +51,6 @@ __all__ = [
     "NetCdfReader",
     "NetCdfPushWriter",
     "NetCdfTimedWriter",
+    "NetCdfStaticWriter",
     "Variable",
 ]

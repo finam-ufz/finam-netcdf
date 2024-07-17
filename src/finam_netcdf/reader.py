@@ -132,6 +132,10 @@ class NetCdfReader(fm.TimeComponent):
     time_callback : callable, optional
         An optional callback for time stepping and indexing:
         (step, last_time, last_index) -> (time, index)
+    time_location : float, optional
+        Relative location of time point in respective time frame if bounds are not given.
+        Output time will always refer to end of current time frame.
+        Should be in interval [0, 1]. 1 by default (end of interval)
     """
 
     def __init__(
@@ -140,6 +144,7 @@ class NetCdfReader(fm.TimeComponent):
         outputs=None,
         time_limits=None,
         time_callback=None,
+        time_location=None,
     ):
         super().__init__()
 
@@ -148,6 +153,7 @@ class NetCdfReader(fm.TimeComponent):
         self.time_var = None
         self.time_callback = time_callback
         self.time_limits = time_limits
+        self.time_location = time_location
         self.dataset = None
         self._init_data = {}
         self.output_infos = {}
@@ -189,7 +195,9 @@ class NetCdfReader(fm.TimeComponent):
 
     def _process_initial_data(self):
         if self.time_var is not None:
-            self.times = create_time_dim(self.dataset, self.time_var)
+            self.times = create_time_dim(
+                self.dataset, self.time_var, self.time_location
+            )
 
             if self.time_limits is None:
                 self.time_indices = list(range(len(self.times)))
