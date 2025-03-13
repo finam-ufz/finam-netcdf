@@ -10,14 +10,13 @@ class TestReader(unittest.TestCase):
     def test_init_reader(self):
         path = "tests/data/lai.nc"
         reader = NetCdfStaticReader(path, [Variable("lai", slices={"time": 0})])
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {"Input": fm.Info(time=None, grid=None, units=None)},
             start=datetime(1901, 1, 1, 1, 0, 0),
             step=timedelta(days=1),
         )
 
         comp = fm.Composition([reader, consumer], log_level="DEBUG")
-        comp.initialize()
 
         (reader.outputs["lai"] >> consumer.inputs["Input"])
 
@@ -26,14 +25,13 @@ class TestReader(unittest.TestCase):
     def test_init_reader_no_time(self):
         path = "tests/data/temp.nc"
         reader = NetCdfStaticReader(path, ["lat"])
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {"Input": fm.Info(time=None, grid=None, units=None)},
             start=datetime(1901, 1, 1, 1, 0, 0),
             step=timedelta(days=1),
         )
 
         comp = fm.Composition([reader, consumer], log_level="DEBUG")
-        comp.initialize()
 
         (reader.outputs["lat"] >> consumer.inputs["Input"])
 
@@ -45,7 +43,7 @@ class TestReader(unittest.TestCase):
             path, ["lai", Variable("lai", io_name="LAI-stat", slices={"time": 0})]
         )
 
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {
                 "Input": fm.Info(time=None, grid=None, units=None),
                 "Input-stat": fm.Info(time=None, grid=None, units=None),
@@ -55,7 +53,6 @@ class TestReader(unittest.TestCase):
         )
 
         comp = fm.Composition([reader, consumer])
-        comp.initialize()
 
         reader.outputs["lai"] >> consumer.inputs["Input"]
         reader.outputs["LAI-stat"] >> consumer.inputs["Input-stat"]
@@ -78,7 +75,7 @@ class TestReader(unittest.TestCase):
         path = "tests/data/lai.nc"
         reader = NetCdfReader(path)
 
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {
                 "Input": fm.Info(time=None, grid=None, units=None),
             },
@@ -87,7 +84,6 @@ class TestReader(unittest.TestCase):
         )
 
         comp = fm.Composition([reader, consumer])
-        comp.initialize()
 
         reader.outputs["lai"] >> consumer.inputs["Input"]
 
@@ -97,7 +93,7 @@ class TestReader(unittest.TestCase):
         path = "tests/data/temp.nc"
         reader = NetCdfReader(path, ["tmin", "lat"])
 
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {
                 "Input": fm.Info(time=None, grid=None, units=None),
             },
@@ -106,7 +102,6 @@ class TestReader(unittest.TestCase):
         )
 
         comp = fm.Composition([reader, consumer])
-        comp.initialize()
         reader.outputs["lat"] >> consumer.inputs["Input"]
 
         comp.run(end_time=datetime(1901, 1, 1, 0, 12))
@@ -117,14 +112,13 @@ class TestReader(unittest.TestCase):
             path, ["lai"], time_limits=(datetime(1901, 1, 1, 0, 8), None)
         )
 
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {"Input": fm.Info(time=None, grid=None, units=None)},
             start=datetime(1901, 1, 1, 0, 8),
             step=timedelta(minutes=1),
         )
 
         comp = fm.Composition([reader, consumer], log_level="DEBUG")
-        comp.initialize()
 
         reader.outputs["lai"] >> consumer.inputs["Input"]
 
@@ -139,14 +133,13 @@ class TestReader(unittest.TestCase):
             path, ["lai"], time_callback=lambda s, _t, _i: (start + s * step, s % 12)
         )
 
-        consumer = fm.modules.DebugConsumer(
+        consumer = fm.components.DebugConsumer(
             {"Input": fm.Info(time=None, grid=None, units=None)},
             start=datetime(2000, 1, 1),
             step=timedelta(days=1),
         )
 
         comp = fm.Composition([reader, consumer], log_level="DEBUG")
-        comp.initialize()
 
         reader.outputs["lai"] >> consumer.inputs["Input"]
 

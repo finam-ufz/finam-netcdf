@@ -77,8 +77,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         if not isinstance(self.global_attrs, dict):
             raise ValueError("inputed global attributes must be of type dict")
 
-    @property
-    def next_time(self):
+    def _next_time(self):
         return self.time + self._step
 
     def _initialize(self):

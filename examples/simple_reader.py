@@ -12,7 +12,6 @@ reader = NetCdfStaticReader(path, [Variable("lai", io_name="LAI", slices={"time"
 viewer = ContourPlot()
 
 composition = fm.Composition([reader, viewer])
-composition.initialize()
 
 reader.outputs["LAI"] >> viewer.inputs["Grid"]
 

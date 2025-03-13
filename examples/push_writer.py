@@ -20,12 +20,12 @@ if not os.path.exists(directory):
 
 file = os.path.join(directory, "test.nc")
 
-lai_gen = fm.modules.CallbackGenerator(
+lai_gen = fm.components.CallbackGenerator(
     callbacks={"LAI": (lambda t: random_grid(grid), fm.Info(None, grid))},
     start=datetime(2000, 1, 1),
     step=timedelta(days=1),
 )
-sm_gen = fm.modules.CallbackGenerator(
+sm_gen = fm.components.CallbackGenerator(
     callbacks={"SM": (lambda t: random_grid(grid), fm.Info(None, grid))},
     start=datetime(2000, 1, 1),
     step=timedelta(days=1),
@@ -33,7 +33,6 @@ sm_gen = fm.modules.CallbackGenerator(
 writer = NetCdfPushWriter(file, inputs=["lai", "SM"])
 
 composition = fm.Composition([lai_gen, sm_gen, writer])
-composition.initialize()
 
 lai_gen.outputs["LAI"] >> writer.inputs["lai"]
 sm_gen.outputs["SM"] >> writer.inputs["SM"]
