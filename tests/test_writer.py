@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import finam as fm
 import numpy as np
 from finam import Composition, Info, UniformGrid
-from finam.modules.generators import CallbackGenerator
+from finam.components.generators import CallbackGenerator
 from netCDF4 import Dataset
 
 from finam_netcdf import NetCdfPushWriter, NetCdfStaticWriter, NetCdfTimedWriter
@@ -59,7 +59,6 @@ class TestWriter(unittest.TestCase):
             )
 
             composition = Composition([source1, source2, writer])
-            composition.initialize()
 
             source1.outputs["Grid"] >> writer.inputs["lai"]
             source2.outputs["Grid"] >> writer.inputs["lai2"]
@@ -87,7 +86,7 @@ class TestWriter(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             file = path.join(tmp, "test.nc")
 
-            source = fm.modules.StaticSimplexNoise(
+            source = fm.components.StaticSimplexNoise(
                 info=fm.Info(None, grid=grid, units="m"),
                 frequency=0.05,
                 octaves=3,
@@ -111,7 +110,6 @@ class TestWriter(unittest.TestCase):
             )
 
             composition = Composition([source, writer])
-            composition.initialize()
 
             source["Noise"] >> writer["height"]
 
@@ -150,7 +148,6 @@ class TestWriter(unittest.TestCase):
             writer = NetCdfPushWriter(path=file, inputs=["lai", "lai2"])
 
             composition = Composition([source1, source2, writer])
-            composition.initialize()
 
             source1.outputs["Grid"] >> writer.inputs["lai"]
             source2.outputs["Grid"] >> writer.inputs["lai2"]
@@ -192,7 +189,6 @@ class TestWriter(unittest.TestCase):
             writer = NetCdfPushWriter(path=file, inputs=["lai", "lai2"])
 
             composition = Composition([source1, source2, writer])
-            composition.initialize()
 
             source1.outputs["Grid"] >> writer.inputs["lai"]
             source2.outputs["Grid"] >> writer.inputs["lai2"]

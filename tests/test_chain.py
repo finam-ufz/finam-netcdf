@@ -27,7 +27,7 @@ class TestChain(unittest.TestCase):
 
             reader = NetCdfReader(in_path, [Variable("tmin", "LAI")])
             writer = NetCdfPushWriter(out_path, ["lai"])
-            consumer = fm.modules.DebugPushConsumer(
+            consumer = fm.components.DebugPushConsumer(
                 inputs={
                     "LAI": fm.Info(time=None, grid=None, units=None),
                 },
@@ -35,7 +35,6 @@ class TestChain(unittest.TestCase):
             )
 
             comp = fm.Composition([reader, writer, consumer])
-            comp.initialize()
 
             reader["LAI"] >> writer["lai"]
             reader["LAI"] >> consumer["LAI"]
@@ -47,7 +46,7 @@ class TestChain(unittest.TestCase):
             # Second iteration
 
             reader = NetCdfReader(out_path, ["lai"])
-            consumer = fm.modules.DebugPushConsumer(
+            consumer = fm.components.DebugPushConsumer(
                 inputs={
                     "LAI": fm.Info(time=None, grid=None, units=None),
                 },
@@ -55,7 +54,6 @@ class TestChain(unittest.TestCase):
             )
 
             comp = fm.Composition([reader, consumer])
-            comp.initialize()
 
             reader["lai"] >> consumer["LAI"]
 

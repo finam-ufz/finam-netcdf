@@ -20,7 +20,6 @@ reader = NetCdfReader(path, ["lai"], time_callback=to_time_step)
 viewer = ContourPlot()
 
 composition = fm.Composition([reader, viewer])
-composition.initialize()
 
 reader.outputs["lai"] >> fm.adapters.LinearTime() >> viewer.inputs["Grid"]
 

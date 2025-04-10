@@ -20,14 +20,14 @@ if not os.path.exists(directory):
 
 file = os.path.join(directory, "test.nc")
 
-lai_gen = fm.modules.SimplexNoise(
+lai_gen = fm.components.SimplexNoise(
     info=fm.Info(datetime(2000, 1, 1), grid=grid, units="m"),
     frequency=0.05,
     time_frequency=1.0 / (30 * 24 * 3600),
     octaves=3,
     persistence=0.5,
 )
-sm_gen = fm.modules.CallbackGenerator(
+sm_gen = fm.components.CallbackGenerator(
     callbacks={"SM": (lambda t: random_grid(grid), fm.Info(None, grid))},
     start=datetime(2000, 1, 1),
     step=timedelta(days=1),
@@ -35,7 +35,6 @@ sm_gen = fm.modules.CallbackGenerator(
 writer = NetCdfTimedWriter(file, inputs=["lai", "SM"], step=timedelta(days=1))
 
 composition = fm.Composition([lai_gen, sm_gen, writer])
-composition.initialize()
 
 lai_gen.outputs["Noise"] >> writer.inputs["lai"]
 sm_gen.outputs["SM"] >> writer.inputs["SM"]

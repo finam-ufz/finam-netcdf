@@ -165,8 +165,7 @@ class NetCdfReader(fm.TimeComponent):
 
         self._status = fm.ComponentStatus.CREATED
 
-    @property
-    def next_time(self):
+    def _next_time(self):
         return None
 
     def _initialize(self):
