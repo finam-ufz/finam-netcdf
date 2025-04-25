@@ -1,12 +1,12 @@
-# finam-netCDF
+# FINAM-NetCDF
 
-FINAM components for reading and writing spatial and temporal data from and to [NetCFD](https://www.unidata.ucar.edu/software/netcdf/) files.
+FINAM components for reading and writing spatial and temporal data from and to [NetCDF](https://www.unidata.ucar.edu/software/netcdf/) files.
 
-<a href="https://finam.pages.ufz.de" title="FINAM homepage" target="_blank">
+<a href="https://finam.pages.ufz.de/finam-netcdf" title="FINAM NetCDF homepage" target="_blank">
   <img width="300" src="https://git.ufz.de/FINAM/finam-netcdf/-/raw/main/docs/source/_static/logo_large.svg" />
 </a>
 
-See the finam-netCDF [documentation](https://finam.pages.ufz.de/finam-netcdf).
+See the FINAM-NetCDF [documentation](https://finam.pages.ufz.de/finam-netcdf).
 
 ## License
 

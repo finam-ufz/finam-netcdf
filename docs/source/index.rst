@@ -53,7 +53,7 @@ A time slice must be provided if the variable is actually temporal.
 :class:`.NetCdfReader`
 """"""""""""""""""""""
 
-Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also [Time manipulation](#time-manipulation)).
+Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also `Time manipulation`).
 
 .. testcode:: NetCdfReader
 
