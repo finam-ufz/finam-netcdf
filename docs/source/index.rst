@@ -6,7 +6,11 @@ FINAM NetCDF
 
 NetCDF reader and writer components for the `FINAM <https://finam.pages.ufz.de/>`_ model coupling framework.
 
-Uses :mod:`xarray` for all input and output functionality.
+.. image:: _static/logo.svg
+   :width: 200px
+   :align: center
+   :class: dark-light p-2
+   :alt: FINAM NetCDF Logo
 
 Quickstart
 ----------
@@ -51,7 +55,7 @@ A time slice must be provided if the variable is actually temporal.
 :class:`.NetCdfReader`
 """"""""""""""""""""""
 
-Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also [Time manipulation](#time-manipulation)).
+Reads once on each time step, where time steps are defined by the time dimension provided by the dataset (but see also `Time manipulation`).
 
 .. testcode:: NetCdfReader
 
@@ -161,4 +165,4 @@ Further information about licensing, the developers team and the changelog of FI
 License
 ^^^^^^^
 
-LGPLv3, Copyright © 2021-2023, the FINAM developers from Helmholtz-Zentrum für Umweltforschung GmbH - UFZ. All rights reserved.
+LGPLv3, Copyright © 2021-2025, the FINAM developers from Helmholtz-Zentrum für Umweltforschung GmbH - UFZ. All rights reserved.
