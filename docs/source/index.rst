@@ -6,7 +6,7 @@ FINAM NetCDF
 
 NetCDF reader and writer components for the `FINAM <https://finam.pages.ufz.de/>`_ model coupling framework.
 
-.. image:: _static/logo.svg
+.. image:: _static/logo.png
    :width: 200px
    :align: center
 
