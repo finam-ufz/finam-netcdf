@@ -473,7 +473,7 @@ def create_variable_list(variables):
     return [var if isinstance(var, Variable) else Variable(var) for var in variables]
 
 
-def extract_variables(dataset, variables=None, only_static=False, mask=fm.Mask.FLEX):
+def extract_variables(dataset, variables=None, only_static=False):
     """
     Extract the variable information from a dataset following CF convention.
 
@@ -541,12 +541,29 @@ def extract_variables(dataset, variables=None, only_static=False, mask=fm.Mask.F
             msg = f"NetCDF: Variable {var.name} misses coordinates: {miss}."
             raise ValueError(msg)
 
+    return variables
+
+
+def set_default_mask(variables, mask=fm.Mask.FLEX):
+    """
+    Set the default mask for variables if needed.
+
+    Parameters
+    ----------
+    variables : list of Variable
+        List of desired variables.
+    mask : :any:`Mask` value or :any:`MASK_TBD`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`finam.Mask.FLEX`: data can have a varying mask (default)
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: constant mask will be determined from the data
+    """
     # set default mask
     for var in variables:
         if var.mask is Ellipsis:
             var.mask = mask
-
-    return variables
 
 
 def extract_time(dataset):
@@ -640,7 +657,8 @@ def extract_info(dataset, variable, current_time=None):
 
 
 def set_mask(info, data, dataset, variable):
-    """Extracts the Info object for the selected variable.
+    """
+    Determine and set the desired mask.
 
     Parameters
     ----------

@@ -13,6 +13,7 @@ from .tools import (
     extract_info,
     extract_time,
     extract_variables,
+    set_default_mask,
     set_mask,
 )
 
@@ -70,8 +71,9 @@ class NetCdfStaticReader(fm.Component):
     def _initialize(self):
         self.dataset = Dataset(self.path)
         self.variables = extract_variables(
-            self.dataset, self.variables, only_static=True, mask=self.mask
+            self.dataset, self.variables, only_static=True
         )
+        set_default_mask(self.variables, self.mask)
         for var in self.variables:
             self.outputs.add(name=var.io_name, static=True)
         self.create_connector()
@@ -152,7 +154,7 @@ class NetCdfReader(fm.TimeComponent):
         default masking specification of the data.
 
         Options:
-            * :any:`finam.Mask.FLEX`: data can have a varying (default)
+            * :any:`finam.Mask.FLEX`: data can have a varying mask (default)
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: constant mask will be determined from the data
     """
@@ -192,7 +194,8 @@ class NetCdfReader(fm.TimeComponent):
     def _initialize(self):
         self.dataset = Dataset(self.path)
         self.time_var = extract_time(self.dataset)
-        self.variables = extract_variables(self.dataset, self.variables, mask=self.mask)
+        self.variables = extract_variables(self.dataset, self.variables)
+        set_default_mask(self.variables, self.mask)
         for var in self.variables:
             self.outputs.add(name=var.io_name, static=var.static)
 

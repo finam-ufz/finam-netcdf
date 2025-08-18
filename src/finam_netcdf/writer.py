@@ -8,7 +8,7 @@ from functools import partial
 import finam as fm
 from netCDF4 import Dataset, date2num
 
-from .tools import create_nc_framework, create_variable_list
+from .tools import create_nc_framework, create_variable_list, set_default_mask
 
 
 class NetCdfTimedWriter(fm.TimeComponent):
@@ -44,6 +44,14 @@ class NetCdfTimedWriter(fm.TimeComponent):
         By default: "time"
     global_attrs : dict, optional
         global attributes for the NetCDF file inputed by the user.
+    mask : :any:`Mask` value or :any:`MASK_TBD` or valid boolean mask for :any:`MaskedArray`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`finam.Mask.FLEX`: data can have a varying mask (default)
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: mask will be determined from input
+            * valid boolean mask for MaskedArray
     """
 
     def __init__(
@@ -53,6 +61,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         step,
         time_var="time",
         global_attrs=None,
+        mask=fm.Mask.FLEX,
     ):
         super().__init__()
 
@@ -60,7 +69,9 @@ class NetCdfTimedWriter(fm.TimeComponent):
             raise ValueError("Step must be None or of type timedelta")
 
         self._path = path
+        self.mask = mask
         self.variables = create_variable_list(inputs)
+        set_default_mask(self.variables, self.mask)
         for var in self.variables:
             if var.static is None:
                 var.static = not bool(time_var)
@@ -91,6 +102,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
                 grid=grid,
                 units=units,
                 static=var.static,
+                mask=var.mask,
                 **var.get_meta(),
             )
 
@@ -176,6 +188,14 @@ class NetCdfStaticWriter(fm.Component):
         List of inputs. Input is either defined by name or a :class:`Variable` instance.
     global_attrs : dict, optional
         global attributes for the NetCDF file inputed by the user.
+    mask : :any:`Mask` value or :any:`MASK_TBD` or valid boolean mask for :any:`MaskedArray`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`finam.Mask.FLEX`: data can have a varying mask (default)
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: mask will be determined from input
+            * valid boolean mask for MaskedArray
     """
 
     def __init__(
@@ -183,11 +203,14 @@ class NetCdfStaticWriter(fm.Component):
         path,
         inputs,
         global_attrs=None,
+        mask=fm.Mask.FLEX,
     ):
         super().__init__()
 
         self._path = path
+        self.mask = mask
         self.variables = create_variable_list(inputs)
+        set_default_mask(self.variables, self.mask)
         for var in self.variables:
             if var.static is None:
                 var.static = True
@@ -215,6 +238,7 @@ class NetCdfStaticWriter(fm.Component):
                 grid=grid,
                 units=units,
                 static=var.static,
+                mask=var.mask,
                 **var.get_meta(),
             )
 
@@ -285,6 +309,14 @@ class NetCdfPushWriter(fm.Component):
         time unit given as a string: days, hours, minutes or seconds.
     global_attrs : dict, optional
             global attributes for the NetCDF file inputed by the user.
+    mask : :any:`Mask` value or :any:`MASK_TBD` or valid boolean mask for :any:`MaskedArray`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`finam.Mask.FLEX`: data can have a varying mask (default)
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: mask will be determined from input
+            * valid boolean mask for MaskedArray
     """
 
     def __init__(
@@ -294,11 +326,14 @@ class NetCdfPushWriter(fm.Component):
         time_var="time",
         time_unit="seconds",
         global_attrs=None,
+        mask=fm.Mask.FLEX,
     ):
         super().__init__()
 
         self._path = path
+        self.mask = mask
         self.variables = create_variable_list(inputs)
+        set_default_mask(self.variables, self.mask)
         for var in self.variables:
             if var.static is None:
                 var.static = False
@@ -335,6 +370,7 @@ class NetCdfPushWriter(fm.Component):
                     time=None,
                     grid=grid,
                     units=units,
+                    mask=var.mask,
                     **var.get_meta(),
                 )
             )
