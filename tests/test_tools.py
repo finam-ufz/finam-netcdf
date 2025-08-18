@@ -1,5 +1,6 @@
 import unittest
 
+import finam as fm
 from finam import Location, RectilinearGrid
 from netCDF4 import Dataset
 from numpy.testing import assert_allclose
@@ -18,7 +19,7 @@ class TestTools(unittest.TestCase):
         path = "tests/data/lai.nc"
         dataset = Dataset(path)
         time_var = "time"
-        variable = Variable("lai", slices={"time": 0})
+        variable = Variable("lai", slices={"time": 0}, mask=fm.Mask.FLEX)
 
         info = extract_info(dataset, variable)
         self.assertTrue(isinstance(info.grid, RectilinearGrid))
