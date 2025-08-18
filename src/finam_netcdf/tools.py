@@ -7,6 +7,9 @@ import finam as fm
 import numpy as np
 from netCDF4 import num2date
 
+MASK_TBD = None
+"""Indicator that the mask is to be determined."""
+
 Z_STD_NAME_POSITIVE = {
     "altitude": "up",
     "atmosphere_ln_pressure_coordinate": "down",
@@ -406,16 +409,28 @@ class Variable:
         Flag indicating static data. If None, this will be determined.
         Writer will interprete None as False.
         Default: None
+    mask : :any:`Mask` value or :any:`MASK_TBD` or :any:`Ellipsis`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`Ellipsis`: use default mask from the component (default)
+            * :any:`finam.Mask.FLEX`: data can have a varying mask
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: constant mask will be determined from the data
+
     **info_kwargs
         Optional keyword arguments to instantiate an Info object (i.e. 'grid' and 'meta')
         Used to overwrite meta data, to change units or to provide a desired grid specification.
     """
 
-    def __init__(self, name, io_name=None, slices=None, static=None, **info_kwargs):
+    def __init__(
+        self, name, io_name=None, slices=None, static=None, mask=..., **info_kwargs
+    ):
         self.name = name
         self.io_name = io_name or name
         self.slices = slices or {}
         self.static = static
+        self.mask = mask
         self.info_kwargs = info_kwargs
 
     def get_meta(self):
@@ -431,15 +446,14 @@ class Variable:
         return meta
 
     def __repr__(self):
-        name, io_name, slices, static = (
+        name, io_name, slices, static, mask = (
             self.name,
             self.io_name,
             self.slices,
             self.static,
+            self.mask,
         )
-        return (
-            f"Variable({name=}, {io_name=}, {slices=}, {static=}, **{self.info_kwargs})"
-        )
+        return f"Variable({name=}, {io_name=}, {slices=}, {static=}, {mask=}, **{self.info_kwargs})"
 
 
 def create_variable_list(variables):
@@ -459,7 +473,7 @@ def create_variable_list(variables):
     return [var if isinstance(var, Variable) else Variable(var) for var in variables]
 
 
-def extract_variables(dataset, variables=None, only_static=False):
+def extract_variables(dataset, variables=None, only_static=False, mask=fm.Mask.FLEX):
     """
     Extract the variable information from a dataset following CF convention.
 
@@ -526,6 +540,12 @@ def extract_variables(dataset, variables=None, only_static=False):
             miss = all_dims - slice_dims - info.coords
             msg = f"NetCDF: Variable {var.name} misses coordinates: {miss}."
             raise ValueError(msg)
+
+    # set default mask
+    for var in variables:
+        if var.mask is Ellipsis:
+            var.mask = mask
+
     return variables
 
 
@@ -616,7 +636,43 @@ def extract_info(dataset, variable, current_time=None):
             raise ValueError(msg)
     meta.update(add_meta)
 
-    return fm.Info(time=current_time, grid=grid, meta=meta)
+    return fm.Info(time=current_time, grid=grid, meta=meta, mask=variable.mask)
+
+
+def set_mask(info, data, dataset, variable):
+    """Extracts the Info object for the selected variable.
+
+    Parameters
+    ----------
+    info : Info
+        Data info.
+    data : numpy.ndarray or numpy.ma.MaskedArray
+        The data slice.
+    dataset : netCDF4.DataSet
+        The input dataset
+    variable : Variable
+        The variable definition
+
+    Returns
+    -------
+    data : numpy.ndarray or numpy.ma.MaskedArray
+        The updated data slice.
+    """
+    if variable.mask is fm.Mask.FLEX:
+        return data
+    if variable.mask is fm.Mask.NONE:
+        data_var = dataset[variable.name]
+        data_var.set_always_mask(False)
+        data_var.set_auto_mask(False)
+        return data.filled()
+    if variable.mask is None:
+        # assume constant mask from first time-step
+        variable.mask = data.mask
+        info.mask = data.mask
+        return data
+    # mask is specified at this point
+    msg = "NetCDF: You can not directly specify a mask for a netcdf output. Use a masking adapter."
+    raise ValueError(msg)
 
 
 def extract_data(dataset, variable, time_var=None, time_index=None):

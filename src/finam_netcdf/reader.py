@@ -13,6 +13,7 @@ from .tools import (
     extract_info,
     extract_time,
     extract_variables,
+    set_mask,
 )
 
 
@@ -47,12 +48,20 @@ class NetCdfStaticReader(fm.Component):
     outputs : list of Variable or str
         List of outputs. Output is either defined by name or a :class:`Variable` instance.
         By default all NetCDF variables found in the file.
+    mask : :any:`Mask` value or :any:`MASK_TBD`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`finam.Mask.FLEX`: data can have a varying (default)
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: mask will be determined from the data
     """
 
-    def __init__(self, path, outputs=None):
+    def __init__(self, path, outputs=None, mask=fm.Mask.FLEX):
         super().__init__()
         self.path = path
         self.variables = outputs
+        self.mask = mask
         self.dataset = None
         self._infos = None
         self._data = None
@@ -61,7 +70,7 @@ class NetCdfStaticReader(fm.Component):
     def _initialize(self):
         self.dataset = Dataset(self.path)
         self.variables = extract_variables(
-            self.dataset, self.variables, only_static=True
+            self.dataset, self.variables, only_static=True, mask=self.mask
         )
         for var in self.variables:
             self.outputs.add(name=var.io_name, static=True)
@@ -72,8 +81,11 @@ class NetCdfStaticReader(fm.Component):
             self._data = {}
             self._infos = {}
             for var in self.variables:
-                self._infos[var.io_name] = extract_info(self.dataset, var)
-                self._data[var.io_name] = extract_data(self.dataset, var)
+                info = extract_info(self.dataset, var)
+                data = extract_data(self.dataset, var)
+                data = set_mask(info, data, self.dataset, var)
+                self._infos[var.io_name] = info
+                self._data[var.io_name] = data
 
         self.try_connect(start_time, push_infos=self._infos, push_data=self._data)
 
@@ -136,6 +148,13 @@ class NetCdfReader(fm.TimeComponent):
         Relative location of time point in respective time frame if bounds are not given.
         Output time will always refer to end of current time frame.
         Should be in interval [0, 1]. 1 by default (end of interval)
+    mask : :any:`Mask` value or :any:`MASK_TBD`, optional
+        default masking specification of the data.
+
+        Options:
+            * :any:`finam.Mask.FLEX`: data can have a varying (default)
+            * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
+            * :any:`MASK_TBD`: constant mask will be determined from the data
     """
 
     def __init__(
@@ -145,6 +164,7 @@ class NetCdfReader(fm.TimeComponent):
         time_limits=None,
         time_callback=None,
         time_location=None,
+        mask=fm.Mask.FLEX,
     ):
         super().__init__()
 
@@ -154,6 +174,7 @@ class NetCdfReader(fm.TimeComponent):
         self.time_callback = time_callback
         self.time_limits = time_limits
         self.time_location = time_location
+        self.mask = mask
         self.dataset = None
         self._init_data = {}
         self.output_infos = {}
@@ -171,7 +192,7 @@ class NetCdfReader(fm.TimeComponent):
     def _initialize(self):
         self.dataset = Dataset(self.path)
         self.time_var = extract_time(self.dataset)
-        self.variables = extract_variables(self.dataset, self.variables)
+        self.variables = extract_variables(self.dataset, self.variables, mask=self.mask)
         for var in self.variables:
             self.outputs.add(name=var.io_name, static=var.static)
 
@@ -225,6 +246,7 @@ class NetCdfReader(fm.TimeComponent):
             data = extract_data(
                 self.dataset, var, self.time_var, self.time_indices[self.time_index]
             )
+            data = set_mask(info, data, self.dataset, var)
             self._init_data[var.io_name] = data
             self.output_infos[var.io_name] = info
 

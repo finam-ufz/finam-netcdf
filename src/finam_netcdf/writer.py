@@ -84,6 +84,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         for var in self.variables:
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
+            # always use mask=Mask.FLEX implicitly
             self.inputs.add(
                 name=var.io_name,
                 time=self.time,
@@ -207,6 +208,7 @@ class NetCdfStaticWriter(fm.Component):
         for var in self.variables:
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
+            # always use mask=Mask.FLEX implicitly
             self.inputs.add(
                 name=var.io_name,
                 time=None,
@@ -325,6 +327,7 @@ class NetCdfPushWriter(fm.Component):
         for var in self.variables:
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
+            # always use mask=Mask.FLEX implicitly
             self.inputs.add(
                 io=fm.CallbackInput(
                     name=var.io_name,
