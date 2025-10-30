@@ -117,6 +117,7 @@ ignore = [
 [tool.pylint.message_control]
 max-line-length = 120
 disable = [
+    "C0302", # too many lines in module
     "C0103", # ignore invalid-names like "x", "y"
     "C0415", # ignore defered imports
     "R0801", # ignore code duplications
@@ -133,3 +134,5 @@ max-attributes = 20
 max-parents = 10
 min-public-methods = 0
 max-branches = 15
+max-statements = 60
+max-positional-arguments = 15

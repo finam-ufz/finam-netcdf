@@ -816,9 +816,7 @@ def _check_axes_uniform(axes, bnds):
     diffs = [
         np.diff(ax) if bd is None else bd[:, 1] - bd[:, 0] for ax, bd in zip(axes, bnds)
     ]
-    return all(
-        [(np.all(np.isclose(dx, dx[0])) if len(dx) > 0 else True) for dx in diffs]
-    )
+    return all((np.all(np.isclose(dx, dx[0])) if len(dx) > 0 else True) for dx in diffs)
 
 
 def _create_uniform(axes, bnds):
@@ -857,7 +855,7 @@ def _create_uniform(axes, bnds):
     return dims, spacing, origin, ax_inc
 
 
-def _create_point_axis(cell_axis, bnd):
+def _create_point_axis(cell_axis, bnd=None):
     """Create a point axis from a cell axis"""
     if bnd is None:
         diffs = np.diff(cell_axis)
