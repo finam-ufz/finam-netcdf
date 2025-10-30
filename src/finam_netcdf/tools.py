@@ -10,6 +10,41 @@ from netCDF4 import num2date
 MASK_TBD = None
 """Indicator that the mask is to be determined."""
 
+MESH_CF_ROLE = {
+    "mesh_topology",
+    "volume_shape_type",
+    "volume_node_connectivity",
+    "edge_node_connectivity",
+    "face_node_connectivity",
+    "volume_face_connectivity",
+    "volume_edge_connectivity",
+    "face_edge_connectivity",
+    "volume_volume_connectivity",
+    "face_face_connectivity",
+    "edge_face_connectivity",
+}
+
+MESH_DIM_SPEC = {"volume_dimension", "face_dimension", "edge_dimension"}
+
+MESH_CON_SPEC = {
+    "volume_node_connectivity",
+    "edge_node_connectivity",
+    "face_node_connectivity",
+    "volume_face_connectivity",
+    "volume_edge_connectivity",
+    "face_edge_connectivity",
+    "volume_volume_connectivity",
+    "face_face_connectivity",
+    "edge_face_connectivity",
+}
+
+MESH_COORD_SPEC = {
+    "node_coordinates",
+    "edge_coordinates",
+    "face_coordinates",
+    "volume_coordinates",
+}
+
 Z_STD_NAME_POSITIVE = {
     "altitude": "up",
     "atmosphere_ln_pressure_coordinate": "down",
@@ -257,6 +292,11 @@ def _set_z_down(dataset, zvars):
     return z_down
 
 
+def _attr_dict(dataset, var):
+    attr_names = dataset[var].ncattrs()
+    return {k: dataset[var].getncattr(k) for k in attr_names}
+
+
 class DatasetInfo:
     """
     Dataset Info container.
@@ -277,8 +317,9 @@ class DatasetInfo:
         bname = "bounds"
         # may includes dims for bounds
         self.dims = set(dataset.dimensions)
+        self.vars = set(dataset.variables)
         # coordinates are variables with same name as a dim
-        self.coords = set(dataset.variables) & self.dims
+        self.coords = self.vars & self.dims
         self.coords_with_bounds = {
             c for c in self.coords if bname in dataset[c].ncattrs()
         }
@@ -287,16 +328,39 @@ class DatasetInfo:
         self.bounds_map = {
             c: dataset[c].getncattr(bname) for c in self.coords_with_bounds
         }
+        self.mesh_related = {
+            v
+            for v in self.vars
+            if (
+                "cf_role" in dataset[v].ncattrs()
+                and dataset[v].getncattr("cf_role") in MESH_CF_ROLE
+            )
+        }
+        self.meshes = {
+            v: _attr_dict(dataset, v)
+            for v in self.mesh_related
+            if dataset[v].getncattr("cf_role") == "mesh_topology"
+        }
+        self.mesh_data = {
+            v
+            for v in self.vars
+            if (
+                "mesh" in dataset[v].ncattrs()
+                and dataset[v].getncattr("mesh") in self.meshes
+            )
+        }
         # bnd specific dims are all dims from bounds that are not coords
         dim_sets = [set()] + [set(dataset[b].dimensions) for b in self.bounds]
         self.bounds_dims = set.union(*dim_sets) - self.coords
         # remove bound specific dims from dims
         self.dims -= self.bounds_dims
         # all relevant data in the file
-        self.data = set(dataset.variables) - self.bounds - self.coords
+        self.data = self.vars - self.bounds - self.coords - self.mesh_related
         # all relevant data on spatial grids
         self.data_with_all_coords = {
-            d for d in self.data if set(dataset[d].dimensions) <= self.coords
+            d
+            for d in self.data
+            if dataset[d].dimensions and set(dataset[d].dimensions) <= self.coords
         }
         self.data_without_coords = {
             d for d in self.data if not (set(dataset[d].dimensions) & self.coords)
@@ -338,9 +402,14 @@ class DatasetInfo:
             self.static_data = {
                 d for d in self.data if tname not in dataset[d].dimensions
             }
+            self.static_mesh_data = {
+                d for d in self.mesh_data if tname not in dataset[d].dimensions
+            }
         else:
             self.static_data = self.data
+            self.static_mesh_data = self.mesh_data
         self.temporal_data = self.data - self.static_data
+        self.temporal_mesh_data = self.mesh_data - self.static_mesh_data
         self.data_spatial_dims_map = {
             d: [i for i in v if i not in self.time]
             for d, v in self.data_dims_map.items()
@@ -630,13 +699,32 @@ def extract_info(dataset, variable, current_time=None):
         }
         for ax in ax_names
     ]
+    ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
+    ax_bnds = [
+        (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
+        for axb in ax_bnds_names
+    ]
+
     if "grid" in variable.info_kwargs:
         # use provided grid from variable object if present
         grid = variable.info_kwargs["grid"]
+    elif _check_axes_uniform(axes, ax_bnds):
+        dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
+        grid = fm.UniformGrid(
+            dims=dims,
+            spacing=spacing,
+            origin=origin,
+            data_location=fm.Location.CELLS,
+            axes_names=ax_names,
+            axes_increase=ax_inc,
+            axes_reversed=axes_reversed,
+            axes_attributes=axes_attrs,
+        )
     else:
         # note: we use point-associated data here.
+        rec_axes = _create_rec_axes(axes, ax_bnds)
         grid = fm.RectilinearGrid(
-            axes=[_create_point_axis(ax) for ax in axes],
+            axes=rec_axes,
             axes_names=ax_names,
             data_location=fm.Location.CELLS,
             axes_reversed=axes_reversed,
@@ -723,13 +811,76 @@ def _get_slice(dims, slices):
     return tuple(slices.get(d, slice(None)) for d in dims)
 
 
-def _create_point_axis(cell_axis):
+def _check_axes_uniform(axes, bnds):
+    """Check if all axes are uniform"""
+    diffs = [
+        np.diff(ax) if bd is None else bd[:, 1] - bd[:, 0] for ax, bd in zip(axes, bnds)
+    ]
+    return all(
+        [(np.all(np.isclose(dx, dx[0])) if len(dx) > 0 else True) for dx in diffs]
+    )
+
+
+def _create_uniform(axes, bnds):
+    """Create inputs for uniform grid."""
+    dims = [len(ax) + 1 for ax in axes]
+    if bnds is None:
+        diffs = [(ax[1] - ax[0] if len(ax) > 1 else 0.0) for ax in axes]
+        ax_inc = [(ax[1] > ax[0] if len(ax) > 1 else True) for ax in axes]
+        # if any axis has only one point, we use dx from other axes
+        if all(dim == 1 for dim in dims):
+            spacing = [1.0] * len(dims)  # single point -> create unit-cell
+        else:
+            spacing = [abs(dx) for dx in diffs]
+            if dims[0] == 1:
+                if dims[1] == 1:
+                    spacing[0] = spacing[1] = spacing[2]
+                else:
+                    spacing[0] = spacing[1]
+            if dims[-1] == 1:
+                if dims[-2] == 1:
+                    spacing[-1] = spacing[-2] = spacing[-3]
+                else:
+                    spacing[-1] = spacing[-2]
+            if len(dims) > 1:
+                if dims[1] == 1:
+                    spacing[1] = spacing[0]
+        origin = [np.min(ax) - sp / 2 for ax, sp in zip(axes, spacing)]
+    else:
+        diffs = [bd[:, 1] - bd[:, 0] for bd in bnds]
+        # sometimes the bounds are not following the axis direction, so we check axis first
+        ax_inc = [
+            (ax[1] > ax[0] if len(ax) > 1 else dx[0] > 0) for ax, dx in zip(axes, diffs)
+        ]
+        spacing = [abs(dx) for dx in diffs]
+        origin = [np.min(bd) for bd in bnds]
+    return dims, spacing, origin, ax_inc
+
+
+def _create_point_axis(cell_axis, bnd):
     """Create a point axis from a cell axis"""
-    diffs = np.diff(cell_axis)
-    mid = cell_axis[:-1] + diffs / 2
-    first = cell_axis[0] - diffs[0] / 2
-    last = cell_axis[-1] + diffs[-1] / 2
-    return np.concatenate(([first], mid, [last]))
+    if bnd is None:
+        diffs = np.diff(cell_axis)
+        if len(diffs) == 0:  # default
+            return np.array([cell_axis[0] - 0.5, cell_axis[0] + 0.5])
+        mid = cell_axis[:-1] + diffs / 2
+        first = cell_axis[0] - diffs[0] / 2
+        last = cell_axis[-1] + diffs[-1] / 2
+        return np.concatenate(([first], mid, [last]))
+    # use bounds if available
+    bd_inc = bnd[0, 1] > bnd[0, 0]
+    ax_inc = cell_axis[1] > cell_axis[0] if len(cell_axis) > 1 else bd_inc
+    # sometimes the bounds are not following the axis direction, so we check axis first
+    if logical_eqv(bd_inc, ax_inc):
+        return np.concatenate((bnd[:, 0], [bnd[-1, 1]]))
+    # bounds should actually swap cols to follow CF-conventions
+    return np.concatenate((bnd[:, 1], [bnd[-1, 0]]))
+
+
+def _create_rec_axes(axes, bnds):
+    if bnds is None:
+        return [_create_point_axis(ax) for ax in axes]
+    return [_create_point_axis(ax, bd) for ax, bd in zip(axes, bnds)]
 
 
 def create_time_dim(dataset, time_var, time_location=None):
