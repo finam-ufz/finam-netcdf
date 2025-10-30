@@ -824,7 +824,7 @@ def _check_axes_uniform(axes, bnds):
 def _create_uniform(axes, bnds):
     """Create inputs for uniform grid."""
     dims = [len(ax) + 1 for ax in axes]
-    if bnds is None:
+    if None in bnds:
         diffs = [(ax[1] - ax[0] if len(ax) > 1 else 0.0) for ax in axes]
         ax_inc = [(ax[1] > ax[0] if len(ax) > 1 else True) for ax in axes]
         # if any axis has only one point, we use dx from other axes
@@ -878,8 +878,6 @@ def _create_point_axis(cell_axis, bnd):
 
 
 def _create_rec_axes(axes, bnds):
-    if bnds is None:
-        return [_create_point_axis(ax) for ax in axes]
     return [_create_point_axis(ax, bd) for ax, bd in zip(axes, bnds)]
 
 
