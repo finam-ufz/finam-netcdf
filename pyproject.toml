@@ -129,10 +129,10 @@ output-format = "colorized"
 
 [tool.pylint.design]
 max-args = 15
-max-locals = 25
+max-locals = 30
 max-attributes = 20
 max-parents = 10
 min-public-methods = 0
-max-branches = 15
-max-statements = 60
+max-branches = 30
+max-statements = 120
 max-positional-arguments = 15

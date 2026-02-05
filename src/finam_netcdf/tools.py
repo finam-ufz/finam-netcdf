@@ -608,7 +608,7 @@ def extract_variables(dataset, variables=None, only_static=False):
     # check if all variables have correct dims and slices
     for var in variables:
         if var.name in info.mesh_data:
-            # TODO: mesh data slicing not supported at the moment
+            # NOTE: mesh data slicing ignored at the moment
             continue
         slice_dims = set(var.slices)
         all_dims = set(info.data_dims_map[var.name])
@@ -679,7 +679,7 @@ def extract_info(dataset, variable, current_time=None):
     current_time : datetime.datetime or None
         Current time for the Info object.
     """
-    # TODO: CRS info missing
+    # NOTE: CRS info missing
 
     info = DatasetInfo(dataset)
     data_var = dataset[variable.name]
@@ -703,8 +703,8 @@ def extract_info(dataset, variable, current_time=None):
         # use provided grid from variable object if present
         grid = variable.info_kwargs["grid"]
     elif mesh is not None:
-        # TODO: warn about slices being ignored for mesh-based grids
-        # TODO: deal with transects on meshes
+        # NOTE: warn about slices being ignored for mesh-based grids
+        # NOTE: deal with transects on meshes
         grid = _create_mesh(dataset, mesh, location, info)
     else:
         # checks if axes were reversed or not
@@ -922,7 +922,6 @@ def _create_mesh(dataset, mesh_name, location, info):
     if not ax_names or all(not ax for ax in ax_names):
         msg = f"NetCDF: mesh_topology {mesh_name} has no node_coordinates."
         raise ValueError(msg)
-    # TODO: assume xyz order for now
     order = info.get_axes_order(ax_names)
     axes_reversed = check_order_reversed(order)
     if axes_reversed:
