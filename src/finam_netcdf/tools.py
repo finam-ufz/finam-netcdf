@@ -22,6 +22,13 @@ MESH_FACE_TYPE_MAP = {
     4: fm.CellType.QUAD,
 }
 
+MESH_DIM_KIND = {1: "edge", 2: "face", 3: "volume"}
+
+MESH_CELL_TYPE_WRITE_MAP = {
+    int(fm.CellType.TETRA): (0, "tetrahedron"),
+    int(fm.CellType.HEX): (2, "hexahedron"),
+}
+
 MESH_CF_ROLE = {
     "mesh_topology",
     "volume_shape_type",
@@ -1186,6 +1193,156 @@ def create_time_dim(dataset, time_var, time_location=None):
     return times
 
 
+def _unique_name(base, existing):
+    if base not in existing:
+        return base
+    idx = 1
+    while f"{base}_{idx}" in existing:
+        idx += 1
+    return f"{base}_{idx}"
+
+
+def _ensure_dimension(dataset, name, size):
+    if name in dataset.dimensions:
+        if len(dataset.dimensions[name]) != size:
+            msg = f"NetCDF: can't add different dimension with same name: {name}"
+            raise ValueError(msg)
+        return
+    dataset.createDimension(name, size)
+
+
+def _validate_unstructured_cells(mesh_dim, cell_types):
+    if mesh_dim == 0:
+        if not np.all(cell_types == fm.CellType.VERTEX):
+            raise ValueError("NetCDF: mesh_dim=0 requires all cell types to be VERTEX.")
+        return
+    if mesh_dim == 1:
+        if not np.all(cell_types == fm.CellType.LINE):
+            raise ValueError("NetCDF: mesh_dim=1 requires all cell types to be LINE.")
+        return
+    if mesh_dim == 2:
+        if not np.all(np.isin(cell_types, [fm.CellType.TRI, fm.CellType.QUAD])):
+            raise ValueError("NetCDF: mesh_dim=2 requires TRI or QUAD cell types.")
+        return
+    if mesh_dim == 3:
+        if not np.all(np.isin(cell_types, [fm.CellType.TETRA, fm.CellType.HEX])):
+            raise ValueError("NetCDF: mesh_dim=3 requires TETRA or HEX cell types.")
+        return
+    raise ValueError(f"NetCDF: invalid mesh_dim: {mesh_dim}")
+
+
+def _create_unstructured_mesh(dataset, mesh_name, grid):
+    mesh_dim = grid.mesh_dim
+    if mesh_dim not in [0, 1, 2, 3]:
+        raise ValueError(f"NetCDF: invalid mesh_dim: {mesh_dim}")
+
+    points = np.asarray(grid.points, dtype=float)
+    n_nodes, dim = points.shape
+    node_dim = f"n{mesh_name}_node"
+    _ensure_dimension(dataset, node_dim, n_nodes)
+
+    # node coordinate variables
+    node_coord_names = []
+    axes_names = list(grid.axes_names)
+    axes_attrs = list(grid.axes_attributes)
+    for i in range(dim):
+        ax = axes_names[i]
+        base = f"{mesh_name}_node_{ax}"
+        vname = _unique_name(base, dataset.variables)
+        node_coord_names.append(vname)
+        var = dataset.createVariable(vname, points.dtype, (node_dim,))
+        attrs = dict(axes_attrs[i]) if axes_attrs[i] else {}
+        attrs.setdefault("axis", "XYZ"[i])
+        var.setncatts(attrs)
+        var[:] = points[:, i]
+
+    # mesh topology variable
+    mesh_var = dataset.createVariable(mesh_name, "i4")
+    mesh_var.cf_role = "mesh_topology"
+    mesh_var.topology_dimension = mesh_dim
+    mesh_var.node_coordinates = " ".join(node_coord_names)
+
+    # no connectivity for topo-dim 0 (vertex-only meshes)
+    if mesh_dim == 0:
+        return {
+            "mesh_name": mesh_name,
+            "mesh_dim": mesh_dim,
+            "node_dim": node_dim,
+            "cell_dim": None,
+            "kind": None,
+        }
+
+    # connectivity for edge/face/volume meshes
+    cell_types = np.asarray(grid.cell_types, dtype=int)
+    _validate_unstructured_cells(mesh_dim, cell_types)
+    node_counts = np.asarray(grid.cell_node_counts, dtype=int)
+    max_nodes = int(np.max(node_counts)) if len(node_counts) else 0
+
+    cells = np.asarray(grid.cells, dtype=int)
+    if cells.shape[1] < max_nodes:
+        msg = "NetCDF: cell connectivity has fewer columns than required by cell types."
+        raise ValueError(msg)
+
+    connectivity = np.full((len(cells), max_nodes), -1, dtype=int)
+    for i, cnt in enumerate(node_counts):
+        if cnt > max_nodes:
+            raise ValueError("NetCDF: invalid cell node count.")
+        connectivity[i, :cnt] = cells[i, :cnt]
+
+    kind = MESH_DIM_KIND[mesh_dim]
+    cell_dim = f"n{mesh_name}_{kind}"
+    max_nodes_dim = f"max_{mesh_name}_{kind}_nodes"
+    _ensure_dimension(dataset, cell_dim, len(connectivity))
+    _ensure_dimension(dataset, max_nodes_dim, max_nodes)
+
+    fill_value = -1 if np.any(connectivity < 0) else None
+    conn_name = f"{mesh_name}_{kind}_nodes"
+    conn_var = dataset.createVariable(
+        conn_name,
+        "i4",
+        (cell_dim, max_nodes_dim),
+        fill_value=fill_value,
+    )
+    conn_var.long_name = f"Connectivity from {kind}s to nodes"
+    conn_var.start_index = 0
+    conn_var.cf_role = f"{kind}_node_connectivity"
+    conn_var[:] = connectivity
+    setattr(mesh_var, f"{kind}_node_connectivity", conn_name)
+
+    if mesh_dim == 3:
+        # volume shape types
+        for ct in np.unique(cell_types):
+            ct = int(ct)
+            if ct not in MESH_CELL_TYPE_WRITE_MAP:
+                raise ValueError("NetCDF: unsupported volume cell type for writing.")
+        flag_values = []
+        flag_meanings = []
+        for ct in np.unique(cell_types):
+            ct = int(ct)
+            val, meaning = MESH_CELL_TYPE_WRITE_MAP[ct]
+            flag_values.append(val)
+            flag_meanings.append(meaning)
+
+        vol_types_name = f"{mesh_name}_vol_types"
+        vol_var = dataset.createVariable(vol_types_name, "i4", (cell_dim,))
+        vol_var.cf_role = "volume_shape_type"
+        vol_var.long_name = "Specifies the shape of the individual volumes."
+        vol_var.flag_values = np.array(flag_values, dtype="i4")
+        vol_var.flag_meanings = " ".join(flag_meanings)
+        vol_var[:] = np.array(
+            [MESH_CELL_TYPE_WRITE_MAP[int(ct)][0] for ct in cell_types], dtype="i4"
+        )
+        mesh_var.volume_shape_type = vol_types_name
+
+    return {
+        "mesh_name": mesh_name,
+        "mesh_dim": mesh_dim,
+        "node_dim": node_dim,
+        "cell_dim": cell_dim,
+        "kind": kind,
+    }
+
+
 def create_nc_framework(
     dataset,
     time_var,
@@ -1226,6 +1383,8 @@ def create_nc_framework(
         If the names of the XYZ coordinates do not match for all variables.
     ValueError
         If a input coordinate is not in grid_info.axes_name variables.
+    ValueError
+        If unstructured grids are malformed or unsupported.
     """
     # adding general user input attributes if any
     dataset.setncatts(global_attrs)
@@ -1254,34 +1413,67 @@ def create_nc_framework(
             msg = f"NetCDF: dataset has no time but some variables are not static: {non_static}"
             raise ValueError(msg)
 
+    mesh_registry = []
+
+    def _get_mesh_info(grid):
+        for entry in mesh_registry:
+            if grid.compatible_with(entry["grid"], check_location=False):
+                return entry
+        mesh_name = _unique_name(f"mesh{grid.mesh_dim}d", dataset.variables)
+        mesh_info = _create_unstructured_mesh(dataset, mesh_name, grid)
+        entry = {"grid": grid, **mesh_info}
+        mesh_registry.append(entry)
+        return entry
+
     for var in variables:
         grid = in_infos[var.io_name].grid
-        if not isinstance(grid, fm.data.StructuredGrid):
-            msg = f"NetCDF: {var.name} is not given on a structured grid."
+        if isinstance(grid, fm.data.StructuredGrid):
+            axes_names = (
+                tuple(reversed(grid.axes_names))
+                if grid.axes_reversed
+                else tuple(grid.axes_names)
+            )
+
+            for i, ax in enumerate(axes_names):
+                if ax in dataset.variables:
+                    # check if existing axes is same as this one
+                    ax1, ax2 = dataset[ax][:], grid.data_axes[i]
+                    if np.size(ax1) == np.size(ax2) and np.allclose(ax1, ax2):
+                        continue
+                    raise ValueError("NetCDF: can't add different axes with same name.")
+                dataset.createDimension(ax, len(grid.data_axes[i]))
+                dataset.createVariable(ax, grid.data_axes[i].dtype, (ax,))
+                dataset[ax].setncatts(grid.axes_attributes[i])
+                dataset[ax].setncattr("axis", "XYZ"[i])
+                dataset[ax][:] = grid.data_axes[i]
+                # add axis bounds if data location is cells
+
+            dim = (time_var,) * (not var.static) + axes_names
+            dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
+            ncvar = dataset.createVariable(var.name, dtype, dim)
+            meta = in_infos[var.io_name].meta
+            ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
+
+        elif isinstance(grid, fm.UnstructuredGrid):
+            mesh_info = _get_mesh_info(grid)
+            location = (
+                "node"
+                if grid.data_location == fm.Location.POINTS
+                else mesh_info["kind"]
+            )
+            if location is None:
+                location = "node"
+            dim_name = (
+                mesh_info["node_dim"] if location == "node" else mesh_info["cell_dim"]
+            )
+            dim = (time_var,) * (not var.static) + (dim_name,)
+            dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
+            ncvar = dataset.createVariable(var.name, dtype, dim)
+            meta = dict(in_infos[var.io_name].meta)
+            meta["mesh"] = mesh_info["mesh_name"]
+            meta["location"] = location
+            ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
+
+        else:
+            msg = f"NetCDF: {var.name} is not given on a supported grid."
             raise ValueError(msg)
-
-        axes_names = (
-            tuple(reversed(grid.axes_names))
-            if grid.axes_reversed
-            else tuple(grid.axes_names)
-        )
-
-        for i, ax in enumerate(axes_names):
-            if ax in dataset.variables:
-                # check if existing axes is same as this one
-                ax1, ax2 = dataset[ax][:], grid.data_axes[i]
-                if np.size(ax1) == np.size(ax2) and np.allclose(ax1, ax2):
-                    continue
-                raise ValueError("NetCDF: can't add different axes with same name.")
-            dataset.createDimension(ax, len(grid.data_axes[i]))
-            dataset.createVariable(ax, grid.data_axes[i].dtype, (ax,))
-            dataset[ax].setncatts(grid.axes_attributes[i])
-            dataset[ax].setncattr("axis", "XYZ"[i])
-            dataset[ax][:] = grid.data_axes[i]
-            # add axis bounds if data location is cells
-
-        dim = (time_var,) * (not var.static) + axes_names
-        dtype = np.asanyarray(in_data[var.io_name].magnitude).dtype
-        ncvar = dataset.createVariable(var.name, dtype, dim)
-        meta = in_infos[var.io_name].meta
-        ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
