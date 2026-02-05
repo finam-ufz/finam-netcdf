@@ -1,6 +1,9 @@
 import unittest
+from os import path
+from tempfile import TemporaryDirectory
 
 import finam as fm
+import numpy as np
 from finam import Location, RectilinearGrid
 from netCDF4 import Dataset
 from numpy.testing import assert_allclose
@@ -8,13 +11,22 @@ from numpy.testing import assert_allclose
 from finam_netcdf.tools import (
     Variable,
     _create_point_axis,
+    extract_data,
     extract_info,
     extract_time,
     extract_variables,
+    set_mask,
 )
 
 
 class TestTools(unittest.TestCase):
+    def _create_masked_dataset(self, file_path):
+        dataset = Dataset(file_path, "w")
+        dataset.createDimension("x", 3)
+        var = dataset.createVariable("v", "f4", ("x",), fill_value=-999.0)
+        var[:] = np.array([1.0, -999.0, 3.0], dtype="f4")
+        dataset.close()
+
     def test_read_grid(self):
         path = "tests/data/lai.nc"
         dataset = Dataset(path)
@@ -59,6 +71,63 @@ class TestTools(unittest.TestCase):
                 self.assertTrue(var.static)
             else:
                 self.assertFalse(var.static)
+
+    def test_set_mask_flex(self):
+        with TemporaryDirectory() as tmp:
+            file_path = path.join(tmp, "mask.nc")
+            self._create_masked_dataset(file_path)
+            dataset = Dataset(file_path)
+            variable = Variable("v", static=True, mask=fm.Mask.FLEX)
+            info = fm.Info(time=None, grid=None)
+            data = extract_data(dataset, variable)
+            self.assertTrue(np.ma.isMaskedArray(data))
+
+            result = set_mask(info, data, dataset, variable)
+            self.assertTrue(np.ma.isMaskedArray(result))
+            self.assertTrue(result.mask[1])
+            self.assertEqual(info.mask, fm.Mask.FLEX)
+            dataset.close()
+
+    def test_set_mask_none(self):
+        with TemporaryDirectory() as tmp:
+            file_path = path.join(tmp, "mask.nc")
+            self._create_masked_dataset(file_path)
+            dataset = Dataset(file_path)
+            variable = Variable("v", static=True, mask=None)
+            info = fm.Info(time=None, grid=None)
+            data = extract_data(dataset, variable)
+            result = set_mask(info, data, dataset, variable)
+
+            self.assertTrue(np.ma.isMaskedArray(result))
+            self.assertTrue(np.array_equal(variable.mask, data.mask))
+            self.assertTrue(np.array_equal(info.mask, data.mask))
+            dataset.close()
+
+    def test_set_mask_none_masked_output(self):
+        with TemporaryDirectory() as tmp:
+            file_path = path.join(tmp, "mask.nc")
+            self._create_masked_dataset(file_path)
+            dataset = Dataset(file_path)
+            variable = Variable("v", static=True, mask=fm.Mask.NONE)
+            info = fm.Info(time=None, grid=None)
+            data = extract_data(dataset, variable)
+            result = set_mask(info, data, dataset, variable)
+
+            self.assertFalse(np.ma.isMaskedArray(result))
+            self.assertEqual(result[1], -999.0)
+            dataset.close()
+
+    def test_set_mask_invalid(self):
+        with TemporaryDirectory() as tmp:
+            file_path = path.join(tmp, "mask.nc")
+            self._create_masked_dataset(file_path)
+            dataset = Dataset(file_path)
+            variable = Variable("v", static=True, mask=np.array([True, False, False]))
+            info = fm.Info(time=None, grid=None)
+            data = extract_data(dataset, variable)
+            with self.assertRaises(ValueError):
+                set_mask(info, data, dataset, variable)
+            dataset.close()
 
 
 if __name__ == "__main__":
