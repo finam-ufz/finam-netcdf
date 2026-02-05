@@ -10,6 +10,13 @@ from netCDF4 import num2date
 MASK_TBD = None
 """Indicator that the mask is to be determined."""
 
+MESH_LOCATIONS = {"node", "edge", "face", "volume"}
+
+MESH_CELL_TYPE_MAP = {
+    "tetrahedron": fm.CellType.TETRA,
+    "hexahedron": fm.CellType.HEX,
+}
+
 MESH_CF_ROLE = {
     "mesh_topology",
     "volume_shape_type",
@@ -377,9 +384,9 @@ class DatasetInfo:
         self.aux_coords = set.union(*aux_sets) - self.coords
         # find axis coordinates
         self.time = find_axis("time", dataset) & self.coords
-        self.x = find_axis("X", dataset) & self.coords
-        self.y = find_axis("Y", dataset) & self.coords
-        self.z = find_axis("Z", dataset) & self.coords
+        self.x = find_axis("X", dataset)
+        self.y = find_axis("Y", dataset)
+        self.z = find_axis("Z", dataset)
         self.z_down = _set_z_down(dataset, self.z)
         self.lon = find_axis("longitude", dataset)
         self.lat = find_axis("latitude", dataset)
@@ -596,6 +603,9 @@ def extract_variables(dataset, variables=None, only_static=False):
 
     # check if all variables have correct dims and slices
     for var in variables:
+        if var.name in info.mesh_data:
+            # TODO: mesh data slicing not supported at the moment
+            continue
         slice_dims = set(var.slices)
         all_dims = set(info.data_dims_map[var.name])
         if not slice_dims <= all_dims:
@@ -665,71 +675,15 @@ def extract_info(dataset, variable, current_time=None):
     current_time : datetime.datetime or None
         Current time for the Info object.
     """
+    # TODO: CRS info missing
 
     info = DatasetInfo(dataset)
     data_var = dataset[variable.name]
 
     # storing attributes of data_var in meta dict
     meta = {name: data_var.getncattr(name) for name in data_var.ncattrs()}
-
-    # checks if axes were reversed or not
-    ax_names = [
-        ax
-        for ax in info.data_spatial_dims_map[variable.name]
-        if ax not in variable.slices
-    ]
-    order = info.get_axes_order(ax_names)
-    axes_reversed = check_order_reversed(order)
-    if axes_reversed:
-        ax_names = ax_names[::-1]  # xyz order now
-
-    # this needs some work with the respective grid to be created correctly
-    if is_transect(order):
-        msg = f"NetCDF: {order} transect slices are not supported at the moment."
-        raise ValueError(msg)
-
-    # getting coordinates data
-    axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
-    # _FillValue and missing_value not allowed for coordinates
-    axes_attrs = [
-        {
-            name: dataset.variables[ax].getncattr(name)
-            for name in dataset.variables[ax].ncattrs()
-            if name not in ["_FillValue", "missing_value"]
-        }
-        for ax in ax_names
-    ]
-    ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
-    ax_bnds = [
-        (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
-        for axb in ax_bnds_names
-    ]
-
-    if "grid" in variable.info_kwargs:
-        # use provided grid from variable object if present
-        grid = variable.info_kwargs["grid"]
-    elif _check_axes_uniform(axes, ax_bnds):
-        dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
-        grid = fm.UniformGrid(
-            dims=dims,
-            spacing=spacing,
-            origin=origin,
-            data_location=fm.Location.CELLS,
-            axes_names=ax_names,
-            axes_increase=ax_inc,
-            axes_reversed=axes_reversed,
-            axes_attributes=axes_attrs,
-        )
-    else:
-        # note: we use point-associated data here.
-        rec_axes = _create_rec_axes(axes, ax_bnds)
-        grid = fm.RectilinearGrid(
-            axes=rec_axes,
-            axes_names=ax_names,
-            data_location=fm.Location.CELLS,
-            axes_reversed=axes_reversed,
-            axes_attributes=axes_attrs,
-        )
+    mesh = meta.pop("mesh", None)  # remove mesh attribute if present
+    location = meta.pop("location", None)  # remove location attribute if present
 
     # update with provided meta from variable object
     add_meta = variable.get_meta()
@@ -740,6 +694,71 @@ def extract_info(dataset, variable, current_time=None):
             msg = f"NetCDF: {name} was provided with different units: {u1}, {u2}"
             raise ValueError(msg)
     meta.update(add_meta)
+
+    if "grid" in variable.info_kwargs:
+        # use provided grid from variable object if present
+        grid = variable.info_kwargs["grid"]
+    elif mesh is not None:
+        # TODO: warn about slices being ignored for mesh-based grids
+        # TODO: deal with transects on meshes
+        grid = _create_mesh(dataset, mesh, location, info)
+    else:
+        # checks if axes were reversed or not
+        ax_names = [
+            ax
+            for ax in info.data_spatial_dims_map[variable.name]
+            if ax not in variable.slices
+        ]
+        order = info.get_axes_order(ax_names)
+        axes_reversed = check_order_reversed(order)
+        if axes_reversed:
+            ax_names = ax_names[::-1]  # xyz order now
+
+        # this needs some work with the respective grid to be created correctly
+        if is_transect(order):
+            msg = f"NetCDF: {order} transect slices are not supported at the moment."
+            raise ValueError(msg)
+
+        # getting coordinates data
+        axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
+        # _FillValue and missing_value not allowed for coordinates
+        axes_attrs = [
+            {
+                name: dataset.variables[ax].getncattr(name)
+                for name in dataset.variables[ax].ncattrs()
+                if name not in ["_FillValue", "missing_value"]
+            }
+            for ax in ax_names
+        ]
+        ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
+        ax_bnds = [
+            (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
+            for axb in ax_bnds_names
+        ]
+
+        if _check_axes_uniform(axes, ax_bnds):
+            dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
+            grid = fm.UniformGrid(
+                dims=dims,
+                spacing=spacing,
+                origin=origin,
+                data_location=fm.Location.CELLS,
+                axes_names=ax_names,
+                axes_increase=ax_inc,
+                axes_reversed=axes_reversed,
+                axes_attributes=axes_attrs,
+            )
+        else:
+            # NOTE: we use point-associated data here and
+            #       convert it to cell-associated in the grid
+            rec_axes = _create_rec_axes(axes, ax_bnds)
+            grid = fm.RectilinearGrid(
+                axes=rec_axes,
+                axes_names=ax_names,
+                data_location=fm.Location.CELLS,
+                axes_reversed=axes_reversed,
+                axes_attributes=axes_attrs,
+            )
 
     return fm.Info(time=current_time, grid=grid, meta=meta, mask=variable.mask)
 
@@ -877,6 +896,236 @@ def _create_point_axis(cell_axis, bnd=None):
 
 def _create_rec_axes(axes, bnds):
     return [_create_point_axis(ax, bd) for ax, bd in zip(axes, bnds)]
+
+
+def _create_mesh(dataset, mesh_name, location, info):
+    if location not in MESH_LOCATIONS:
+        msg = f"NetCDF: mesh data has invalid location: {location}."
+        raise ValueError(msg)
+    if mesh_name not in dataset.variables:
+        msg = f"NetCDF: mesh_topology {mesh_name} not found in dataset."
+        raise ValueError(msg)
+    mesh_var = dataset[mesh_name]
+    mesh_meta = {name: mesh_var.getncattr(name) for name in mesh_var.ncattrs()}
+    if mesh_meta.get("cf_role", None) != "mesh_topology":
+        msg = f"NetCDF: Variable {mesh_name} is not a mesh_topology."
+        raise ValueError(msg)
+    mesh_dim = mesh_meta.get("topology_dimension", None)
+    if mesh_dim is None or mesh_dim not in [0, 1, 2, 3]:
+        msg = f"NetCDF: mesh_topology {mesh_name} has invalid topology_dimension: {mesh_dim}."
+        raise ValueError(msg)
+    ax_names = mesh_meta.get("node_coordinates", "").split(" ")
+    if not ax_names or all(not ax for ax in ax_names):
+        msg = f"NetCDF: mesh_topology {mesh_name} has no node_coordinates."
+        raise ValueError(msg)
+    # TODO: assume xyz order for now
+    order = info.get_axes_order(ax_names)
+    axes_reversed = check_order_reversed(order)
+    if axes_reversed:
+        ax_names = ax_names[::-1]  # xyz order now
+    # getting coordinates data
+    axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
+    # _FillValue and missing_value not allowed for coordinates
+    axes_attrs = [
+        {
+            name: dataset.variables[ax].getncattr(name)
+            for name in dataset.variables[ax].ncattrs()
+            if name not in ["_FillValue", "missing_value"]
+        }
+        for ax in ax_names
+    ]
+    dim = len(axes)
+    if mesh_dim > dim:
+        msg = (
+            f"NetCDF: mesh_topology {mesh_name} has topology_dimension {mesh_dim} "
+            f"greater than number of node_coordinates {dim}."
+        )
+        raise ValueError(msg)
+    points = np.array(axes).T
+    if location == "node":
+        grid = fm.UnstructuredPoints(
+            points=points,
+            axes_attributes=axes_attrs,
+            axes_names=ax_names,
+        )
+    elif location == "edge":
+        if mesh_dim < 1:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} has invalid "
+                f"topology_dimension for edge location: {mesh_dim}."
+            )
+            raise ValueError(msg)
+        if "edge_node_connectivity" not in mesh_meta:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} missing "
+                "edge_node_connectivity for edge location."
+            )
+            raise ValueError(msg)
+        conn_name = mesh_meta["edge_node_connectivity"]
+        if conn_name not in dataset.variables:
+            msg = f"NetCDF: edge_node_connectivity {conn_name} not found in dataset."
+            raise ValueError(msg)
+        conn_var = dataset[conn_name]
+        start_index = (
+            conn_var.getncattr("start_index")
+            if "start_index" in conn_var.ncattrs()
+            else 0
+        )
+        connectivity = np.asarray(conn_var[:, :]).copy()
+        n_cells = len(connectivity)
+        cell_types = np.full(n_cells, fm.CellType.LINE, dtype=int)
+        connectivity -= start_index  # convert to 0-based indexing
+        # create a network
+        grid = fm.UnstructuredGrid(
+            points=points,
+            cells=connectivity,
+            cell_types=cell_types,
+            data_location=fm.Location.CELLS,
+            axes_attributes=axes_attrs,
+            axes_names=ax_names,
+        )
+    elif location == "face":
+        if mesh_dim < 2:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} has invalid "
+                f"topology_dimension for face location: {mesh_dim}."
+            )
+            raise ValueError(msg)
+        if "face_node_connectivity" not in mesh_meta:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} missing "
+                "face_node_connectivity for face location."
+            )
+            raise ValueError(msg)
+        conn_name = mesh_meta["face_node_connectivity"]
+        if conn_name not in dataset.variables:
+            msg = f"NetCDF: face_node_connectivity {conn_name} not found in dataset."
+            raise ValueError(msg)
+        conn_var = dataset[conn_name]
+        start_index = (
+            conn_var.getncattr("start_index")
+            if "start_index" in conn_var.ncattrs()
+            else 0
+        )
+        connectivity = conn_var[:, :].copy()
+        connectivity -= start_index  # convert to 0-based indexing
+        n_cells = len(connectivity)
+        if np.ma.is_masked(connectivity):
+            # determine cell types from mask (len of rows: 3->triangle, 4->quad)
+            con_mask = connectivity.mask
+            connectivity = connectivity.filled(
+                -1
+            )  # fill masked values with -1 for fm.Grid
+            cell_types = [
+                fm.CellType.TRI if np.sum(~con_mask[i]) == 3 else fm.CellType.QUAD
+                for i in range(len(connectivity))
+            ]
+        else:
+            # umasked connectivity -> all cells have same number of nodes -> same cell type
+            if connectivity.shape[1] == 3:
+                cell_types = np.full(n_cells, fm.CellType.TRI, dtype=int)
+            elif connectivity.shape[1] == 4:
+                cell_types = np.full(n_cells, fm.CellType.QUAD, dtype=int)
+            else:
+                msg = (
+                    f"NetCDF: face_node_connectivity {conn_name} has "
+                    f"invalid number of nodes per face: {connectivity.shape[1]}."
+                )
+                raise ValueError(msg)
+        # create a surface mesh
+        grid = fm.UnstructuredGrid(
+            points=points,
+            cells=connectivity,
+            cell_types=cell_types,
+            data_location=fm.Location.CELLS,
+            axes_attributes=axes_attrs,
+            axes_names=ax_names,
+        )
+    else:
+        # location is "volume" here
+        if mesh_dim < 3:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} has invalid "
+                f"topology_dimension for volume location: {mesh_dim}."
+            )
+            raise ValueError(msg)
+        if "volume_node_connectivity" not in mesh_meta:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} missing "
+                "volume_node_connectivity for volume location."
+            )
+            raise ValueError(msg)
+        conn_name = mesh_meta["volume_node_connectivity"]
+        if conn_name not in dataset.variables:
+            msg = f"NetCDF: volume_node_connectivity {conn_name} not found in dataset."
+            raise ValueError(msg)
+        conn_var = dataset[conn_name]
+        start_index = (
+            conn_var.getncattr("start_index")
+            if "start_index" in conn_var.ncattrs()
+            else 0
+        )
+        connectivity = np.asarray(conn_var[:, :]).copy()
+        connectivity -= start_index  # convert to 0-based indexing
+        n_cells = len(connectivity)
+        if np.ma.is_masked(connectivity):
+            connectivity = connectivity.filled(
+                -1
+            )  # fill masked values with -1 for fm.Grid
+        # cell types given by volume_shape_type attribute of mesh as integer flag values
+        # defined in CF-conventions, e.g.:
+        # integer Mesh3D_vol_types(nMesh3D_vol) ;
+        # Mesh3D_vol_types:cf_role = "volume_shape_type" ;
+        # Mesh3D_vol_types:long_name = "Specifies the shape of the individual volumes." ;
+        # Mesh3D_vol_types:flag_range = 0b, 2b ;
+        # Mesh3D_vol_types:flag_values = 0b, 1b, 2b ;
+        # Mesh3D_vol_types:flag_meanings = "tetrahedron wedge hexahedron" ;
+        if "volume_shape_type" not in mesh_meta:
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} missing "
+                "volume_shape_type for volume location."
+            )
+            raise ValueError(msg)
+        cell_types_var = dataset[mesh_meta["volume_shape_type"]]
+        cell_types = cell_types_var[:].copy()
+        # convert CF flag values/meanings to fm.CellType values (e.g. tetrahedron->TETRA, hexahedron->HEX)
+        # other cell types not supported by finam -> error
+        # use MESH_CELL_TYPE_MAP
+        # check if var has flag_values and flag_meanings attributes
+        if (
+            "flag_values" not in cell_types_var.ncattrs()
+            or "flag_meanings" not in cell_types_var.ncattrs()
+        ):
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} volume_shape_type variable "
+                f"{mesh_meta['volume_shape_type']} missing flag_values or flag_meanings attributes."
+            )
+            raise ValueError(msg)
+        # create value->meaning dict for flag values
+        flag_values = cell_types_var.flag_values
+        flag_meanings = cell_types_var.flag_meanings.split(" ")
+        flag_cell_map = {
+            fv: MESH_CELL_TYPE_MAP[fm]
+            for fv, fm in zip(flag_values, flag_meanings)
+            if fm in MESH_CELL_TYPE_MAP
+        }
+        cell_types = [flag_cell_map.get(ct, -1) for ct in cell_types]
+        if any(ct == -1 for ct in cell_types):
+            msg = (
+                f"NetCDF: mesh_topology {mesh_name} volume_shape_type variable "
+                f"{mesh_meta['volume_shape_type']} has unsupported cell types in flag_values/flag_meanings."
+            )
+            raise ValueError(msg)
+        # create grid
+        grid = fm.UnstructuredGrid(
+            points=points,
+            cells=connectivity,
+            cell_types=cell_types,
+            data_location=fm.Location.CELLS,
+            axes_attributes=axes_attrs,
+            axes_names=ax_names,
+        )
+    return grid
 
 
 def create_time_dim(dataset, time_var, time_location=None):
