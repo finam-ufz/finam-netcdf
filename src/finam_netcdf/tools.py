@@ -17,6 +17,11 @@ MESH_CELL_TYPE_MAP = {
     "hexahedron": fm.CellType.HEX,
 }
 
+MESH_FACE_TYPE_MAP = {
+    3: fm.CellType.TRI,
+    4: fm.CellType.QUAD,
+}
+
 MESH_CF_ROLE = {
     "mesh_topology",
     "volume_shape_type",
@@ -376,7 +381,7 @@ class DatasetInfo:
         # get auxiliary coordinates (given under coordinate attribute and are not dims)
         self.data_with_aux = {d for d in self.data if cname in dataset[d].ncattrs()}
         self.aux_coords_map = {
-            d: dataset[d].getncattr(cname).split(" ") for d in self.data_with_aux
+            d: dataset[d].getncattr(cname).split() for d in self.data_with_aux
         }
         # needs at least one set for "union"
         aux_sets = [set()] + [set(aux) for _, aux in self.aux_coords_map.items()]
@@ -384,22 +389,21 @@ class DatasetInfo:
         self.aux_coords = set.union(*aux_sets) - self.coords
         # find axis coordinates
         self.time = find_axis("time", dataset) & self.coords
-        self.x = find_axis("X", dataset)
-        self.y = find_axis("Y", dataset)
-        self.z = find_axis("Z", dataset)
-        self.z_down = _set_z_down(dataset, self.z)
         self.lon = find_axis("longitude", dataset)
         self.lat = find_axis("latitude", dataset)
-        self.x -= self.lon  # treat lon separately from x-axis
-        self.y -= self.lat  # treat lat separately from y-axis
         # state if lat/lon are valid coord axis
         self.lon_axis = bool(self.lon & self.coords)
         self.lat_axis = bool(self.lat & self.coords)
-        self.all_axes = self.time | self.x | self.y | self.z
-        if self.lon_axis:
-            self.all_axes |= self.lon & self.coords
-        if self.lat_axis:
-            self.all_axes |= self.lat & self.coords
+        self.x = find_axis("X", dataset)
+        self.y = find_axis("Y", dataset)
+        self.z = find_axis("Z", dataset)
+        self.x -= self.lon  # treat lon separately from x-axis
+        self.y -= self.lat  # treat lat separately from y-axis
+        self.z_down = _set_z_down(dataset, self.z)
+        axes = self.time | self.x | self.y | self.z | self.lon | self.lat
+        # treat all 1d vars found by find_axis as potential axes (especially for meshes),
+        # even if they don't share their name with a dimension
+        self.all_axes = {a for a in axes if len(dataset[a].dimensions) == 1}
         # we need a single time dimension or none
         if len(self.time) > 1:
             raise ValueError("NetCDF: only one time axis allowed in NetCDF file.")
@@ -447,16 +451,16 @@ class DatasetInfo:
         for d in dims:
             if d not in self.all_axes:
                 raise ValueError(
-                    f"NetCDF: '{d}' is not a valid axis for a gridded data variable. "
+                    f"NetCDF: '{d}' is not a valid coordinate axis. "
                     "If you need this variable, slice along this axis with a fix index."
                 )
             if d in self.x:
                 order += "x"
-            if d in self.lon & self.coords and self.lon_axis:
+            if d in self.lon:
                 order += "x"
             if d in self.y:
                 order += "y"
-            if d in self.lat & self.coords and self.lat_axis:
+            if d in self.lat:
                 order += "y"
             if d in self.z:
                 order += "z"
@@ -914,7 +918,7 @@ def _create_mesh(dataset, mesh_name, location, info):
     if mesh_dim is None or mesh_dim not in [0, 1, 2, 3]:
         msg = f"NetCDF: mesh_topology {mesh_name} has invalid topology_dimension: {mesh_dim}."
         raise ValueError(msg)
-    ax_names = mesh_meta.get("node_coordinates", "").split(" ")
+    ax_names = mesh_meta.get("node_coordinates", "").split()
     if not ax_names or all(not ax for ax in ax_names):
         msg = f"NetCDF: mesh_topology {mesh_name} has no node_coordinates."
         raise ValueError(msg)
@@ -972,6 +976,12 @@ def _create_mesh(dataset, mesh_name, location, info):
             else 0
         )
         connectivity = np.asarray(conn_var[:, :]).copy()
+        if connectivity.shape[1] != 2:
+            msg = (
+                f"NetCDF: edge_node_connectivity {conn_name} has invalid number of nodes per edge: "
+                f"{connectivity.shape[1]} (expected 2)."
+            )
+            raise ValueError(msg)
         n_cells = len(connectivity)
         cell_types = np.full(n_cells, fm.CellType.LINE, dtype=int)
         connectivity -= start_index  # convert to 0-based indexing
@@ -1010,28 +1020,35 @@ def _create_mesh(dataset, mesh_name, location, info):
         connectivity = conn_var[:, :].copy()
         connectivity -= start_index  # convert to 0-based indexing
         n_cells = len(connectivity)
+        if connectivity.shape[1] not in [3, 4]:
+            msg = (
+                f"NetCDF: face_node_connectivity {conn_name} has invalid max. number of "
+                f"nodes per face: {connectivity.shape[1]} (expected 3 or 4)."
+            )
+            raise ValueError(msg)
         if np.ma.is_masked(connectivity):
             # determine cell types from mask (len of rows: 3->triangle, 4->quad)
             con_mask = connectivity.mask
-            connectivity = connectivity.filled(
-                -1
-            )  # fill masked values with -1 for fm.Grid
+            # fill masked values with -1 for fm.Grid
+            connectivity = connectivity.filled(-1)
+            # determine face type from number of valid nodes (sum of non-masked values in each row)
+            # 3 valid nodes -> triangle, 4 valid nodes -> quad, other -> invalid (-1)
             cell_types = [
-                fm.CellType.TRI if np.sum(~con_mask[i]) == 3 else fm.CellType.QUAD
+                MESH_FACE_TYPE_MAP.get(np.sum(~con_mask[i]), -1)
                 for i in range(len(connectivity))
             ]
         else:
             # umasked connectivity -> all cells have same number of nodes -> same cell type
             if connectivity.shape[1] == 3:
                 cell_types = np.full(n_cells, fm.CellType.TRI, dtype=int)
-            elif connectivity.shape[1] == 4:
-                cell_types = np.full(n_cells, fm.CellType.QUAD, dtype=int)
             else:
-                msg = (
-                    f"NetCDF: face_node_connectivity {conn_name} has "
-                    f"invalid number of nodes per face: {connectivity.shape[1]}."
-                )
-                raise ValueError(msg)
+                cell_types = np.full(n_cells, fm.CellType.QUAD, dtype=int)
+        if any(ct == -1 for ct in cell_types):
+            msg = (
+                f"NetCDF: face_node_connectivity {conn_name} has invalid cell types "
+                f"determined from mask (only 3 or 4 valid nodes allowed)."
+            )
+            raise ValueError(msg)
         # create a surface mesh
         grid = fm.UnstructuredGrid(
             points=points,
@@ -1103,7 +1120,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             raise ValueError(msg)
         # create value->meaning dict for flag values
         flag_values = cell_types_var.flag_values
-        flag_meanings = cell_types_var.flag_meanings.split(" ")
+        flag_meanings = cell_types_var.flag_meanings.split()
         flag_cell_map = {
             fv: MESH_CELL_TYPE_MAP[fm]
             for fv, fm in zip(flag_values, flag_meanings)
