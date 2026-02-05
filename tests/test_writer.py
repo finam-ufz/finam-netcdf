@@ -15,7 +15,7 @@ from finam_netcdf import NetCdfPushWriter, NetCdfStaticWriter, NetCdfTimedWriter
 
 def generate_grid(grid):
     return np.reshape(
-        np.random.random(grid.data_size), newshape=grid.data_shape, order=grid.order
+        np.random.random(grid.data_size), grid.data_shape, order=grid.order
     )
 
 
