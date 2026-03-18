@@ -2,18 +2,18 @@ from datetime import datetime
 
 import finam as fm
 import matplotlib.pyplot as plt
-from finam_plot import ContourPlot
+from finam_plot import ImagePlot
 
 from finam_netcdf import NetCdfStaticReader, Variable
 
-path = "tests/data/lai.nc"
+path = "tests/data/temp.nc"
 
-reader = NetCdfStaticReader(path, [Variable("lai", io_name="LAI", slices={"time": 0})])
-viewer = ContourPlot()
+reader = NetCdfStaticReader(path, [Variable("tmin", io_name="T", slices={"time": 0})])
+viewer = ImagePlot()
 
 composition = fm.Composition([reader, viewer])
 
-reader.outputs["LAI"] >> viewer.inputs["Grid"]
+reader.outputs["T"] >> viewer.inputs["Grid"]
 
 composition.run()
 
