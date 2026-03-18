@@ -34,10 +34,11 @@ Tools
    :caption: Tools
 
     Variable
+    MASK_TBD
 """
 
 from .reader import NetCdfReader, NetCdfStaticReader
-from .tools import Variable
+from .tools import MASK_TBD, Variable
 from .writer import NetCdfPushWriter, NetCdfStaticWriter, NetCdfTimedWriter
 
 try:
@@ -53,4 +54,5 @@ __all__ = [
     "NetCdfTimedWriter",
     "NetCdfStaticWriter",
     "Variable",
+    "MASK_TBD",
 ]

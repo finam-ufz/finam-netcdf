@@ -15,8 +15,35 @@ from finam_netcdf import NetCdfPushWriter, NetCdfStaticWriter, NetCdfTimedWriter
 
 def generate_grid(grid):
     return np.reshape(
-        np.random.random(grid.data_size), newshape=grid.data_shape, order=grid.order
+        np.random.random(grid.data_size), grid.data_shape, order=grid.order
     )
+
+
+def _mesh_axes_attrs(dim):
+    return [{"axis": "XYZ"[i], "units": "m"} for i in range(dim)]
+
+
+def _make_mesh_grids(points, cells, cell_types):
+    dim = points.shape[1]
+    axes_attrs = _mesh_axes_attrs(dim)
+    axes_names = ["x", "y", "z"][:dim]
+    grid_cells = fm.UnstructuredGrid(
+        points=points,
+        cells=cells,
+        cell_types=cell_types,
+        data_location=fm.Location.CELLS,
+        axes_attributes=axes_attrs,
+        axes_names=axes_names,
+    )
+    grid_nodes = fm.UnstructuredGrid(
+        points=points,
+        cells=cells,
+        cell_types=cell_types,
+        data_location=fm.Location.POINTS,
+        axes_attributes=axes_attrs,
+        axes_names=axes_names,
+    )
+    return grid_nodes, grid_cells
 
 
 class TestWriter(unittest.TestCase):
@@ -195,6 +222,200 @@ class TestWriter(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 composition.run(end_time=datetime(2000, 1, 31))
+
+    def test_static_writer_unstructured(self):
+        cases = [
+            (
+                "edge",
+                1,
+                np.array([[0.0], [1.0], [2.0], [3.0]]),
+                np.array([[0, 1], [1, 2], [2, 3]], dtype=int),
+                np.full(3, fm.CellType.LINE, dtype=int),
+            ),
+            (
+                "face",
+                2,
+                np.array([[0, 0], [1, 0], [0, 1], [1, 1], [2, 0], [2, 1]], dtype=float),
+                np.array([[0, 1, 2, -1], [1, 4, 5, 3]], dtype=int),
+                np.array([fm.CellType.TRI, fm.CellType.QUAD], dtype=int),
+            ),
+            (
+                "volume",
+                3,
+                np.array(
+                    [
+                        [0, 0, 0],
+                        [1, 0, 0],
+                        [0, 1, 0],
+                        [0, 0, 1],
+                        [2, 0, 0],
+                        [3, 0, 0],
+                        [3, 1, 0],
+                        [2, 1, 0],
+                        [2, 0, 1],
+                        [3, 0, 1],
+                        [3, 1, 1],
+                        [2, 1, 1],
+                    ],
+                    dtype=float,
+                ),
+                np.array(
+                    [
+                        [0, 1, 2, 3, -1, -1, -1, -1],
+                        [4, 5, 6, 7, 8, 9, 10, 11],
+                    ],
+                    dtype=int,
+                ),
+                np.array([fm.CellType.TETRA, fm.CellType.HEX], dtype=int),
+            ),
+        ]
+
+        for kind, mesh_dim, points, cells, cell_types in cases:
+            with self.subTest(kind=kind):
+                grid_nodes, grid_cells = _make_mesh_grids(points, cells, cell_types)
+
+                with TemporaryDirectory() as tmp:
+                    file = path.join(tmp, f"unstructured_{kind}.nc")
+                    source = fm.components.StaticCallbackGenerator(
+                        callbacks={
+                            "node": (
+                                lambda g=grid_nodes: np.arange(g.data_size),
+                                Info(None, grid_nodes, units="1"),
+                            ),
+                            "cell": (
+                                lambda g=grid_cells: np.arange(g.data_size) + 10,
+                                Info(None, grid_cells, units="1"),
+                            ),
+                        }
+                    )
+                    writer = NetCdfStaticWriter(path=file, inputs=["node", "cell"])
+                    composition = Composition([source, writer])
+                    source.outputs["node"] >> writer.inputs["node"]
+                    source.outputs["cell"] >> writer.inputs["cell"]
+                    composition.run()
+
+                    dataset = Dataset(file)
+                    mesh_vars = [
+                        v
+                        for v in dataset.variables
+                        if getattr(dataset[v], "cf_role", None) == "mesh_topology"
+                    ]
+                    self.assertEqual(len(mesh_vars), 1)
+                    mesh_name = mesh_vars[0]
+                    mesh_var = dataset[mesh_name]
+                    self.assertEqual(mesh_var.topology_dimension, mesh_dim)
+
+                    node_coords = mesh_var.node_coordinates.split()
+                    self.assertEqual(len(node_coords), points.shape[1])
+                    node_dim = dataset[node_coords[0]].dimensions[0]
+                    self.assertEqual(len(dataset.dimensions[node_dim]), points.shape[0])
+
+                    node_var = dataset["node"]
+                    self.assertEqual(node_var.mesh, mesh_name)
+                    self.assertEqual(node_var.location, "node")
+                    self.assertEqual(node_var.dimensions, (node_dim,))
+
+                    cell_var = dataset["cell"]
+                    self.assertEqual(cell_var.mesh, mesh_name)
+                    self.assertEqual(cell_var.location, kind)
+
+                    conn_attr = f"{kind}_node_connectivity"
+                    self.assertTrue(hasattr(mesh_var, conn_attr))
+                    conn_name = getattr(mesh_var, conn_attr)
+                    conn_var = dataset[conn_name]
+                    self.assertEqual(conn_var.cf_role, conn_attr)
+                    self.assertEqual(conn_var.start_index, 0)
+                    cell_dim = conn_var.dimensions[0]
+                    self.assertEqual(cell_var.dimensions, (cell_dim,))
+
+                    if kind in ("face", "volume"):
+                        self.assertTrue(hasattr(conn_var, "_FillValue"))
+                        self.assertEqual(conn_var._FillValue, -1)
+
+                    if kind == "volume":
+                        self.assertTrue(hasattr(mesh_var, "volume_shape_type"))
+                        vol_name = mesh_var.volume_shape_type
+                        vol_var = dataset[vol_name]
+                        self.assertEqual(vol_var.cf_role, "volume_shape_type")
+
+                    dataset.close()
+
+    def test_static_writer_unstructured_points(self):
+        points = np.array([[0.0], [1.0], [2.0]])
+        grid = fm.UnstructuredPoints(points=points, axes_attributes=_mesh_axes_attrs(1))
+
+        with TemporaryDirectory() as tmp:
+            file = path.join(tmp, "unstructured_points.nc")
+            source = fm.components.StaticCallbackGenerator(
+                callbacks={
+                    "node": (
+                        lambda g=grid: np.arange(g.data_size),
+                        Info(None, grid, units="1"),
+                    )
+                }
+            )
+            writer = NetCdfStaticWriter(path=file, inputs=["node"])
+            composition = Composition([source, writer])
+            source.outputs["node"] >> writer.inputs["node"]
+            composition.run()
+
+            dataset = Dataset(file)
+            mesh_vars = [
+                v
+                for v in dataset.variables
+                if getattr(dataset[v], "cf_role", None) == "mesh_topology"
+            ]
+            self.assertEqual(len(mesh_vars), 1)
+            mesh_name = mesh_vars[0]
+            mesh_var = dataset[mesh_name]
+            self.assertEqual(mesh_var.topology_dimension, 0)
+            self.assertFalse(hasattr(mesh_var, "edge_node_connectivity"))
+            self.assertFalse(hasattr(mesh_var, "face_node_connectivity"))
+            self.assertFalse(hasattr(mesh_var, "volume_node_connectivity"))
+
+            node_coords = mesh_var.node_coordinates.split()
+            node_dim = dataset[node_coords[0]].dimensions[0]
+            self.assertEqual(len(dataset.dimensions[node_dim]), points.shape[0])
+
+            node_var = dataset["node"]
+            self.assertEqual(node_var.mesh, mesh_name)
+            self.assertEqual(node_var.location, "node")
+            self.assertEqual(node_var.dimensions, (node_dim,))
+
+            dataset.close()
+
+    def test_timed_writer_unstructured(self):
+        points = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=float)
+        cells = np.array([[0, 1, 2, -1], [1, 3, 2, -1]], dtype=int)
+        cell_types = np.array([fm.CellType.TRI, fm.CellType.TRI], dtype=int)
+        _grid_nodes, grid_cells = _make_mesh_grids(points, cells, cell_types)
+
+        with TemporaryDirectory() as tmp:
+            file = path.join(tmp, "unstructured_timed.nc")
+            source = CallbackGenerator(
+                callbacks={
+                    "cell": (
+                        lambda t, g=grid_cells: np.arange(g.data_size) + t.day,
+                        Info(None, grid_cells, units="1"),
+                    ),
+                },
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
+            writer = NetCdfTimedWriter(
+                path=file,
+                inputs=["cell"],
+                step=timedelta(days=1),
+            )
+            composition = Composition([source, writer])
+            source.outputs["cell"] >> writer.inputs["cell"]
+            composition.run(end_time=datetime(2000, 1, 2))
+
+            dataset = Dataset(file)
+            self.assertIn("time", dataset.dimensions)
+            self.assertEqual(len(dataset.dimensions["time"]), 2)
+            self.assertEqual(dataset["cell"].dimensions[0], "time")
+            dataset.close()
 
 
 if __name__ == "__main__":
