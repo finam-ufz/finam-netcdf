@@ -9,6 +9,7 @@ import finam as fm
 import numpy as np
 from netCDF4 import Dataset, date2num
 
+from .input import NetCDFCallbackInput, NetCDFInput
 from .tools import create_nc_framework, create_variable_list, set_default_mask
 
 
@@ -102,13 +103,16 @@ class NetCdfTimedWriter(fm.TimeComponent):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                name=var.io_name,
-                time=self.time,
-                grid=grid,
-                units=units,
-                static=var.static,
-                mask=var.mask,
-                **var.get_meta(),
+                io=NetCDFInput(
+                    name=var.io_name,
+                    time=self.time,
+                    grid=grid,
+                    units=units,
+                    static=var.static,
+                    mask=var.mask,
+                    force_axes_reversed=self._force_axes_reversed,
+                    **var.get_meta(),
+                ),
             )
 
         self.dataset = Dataset(self._path, "w")
@@ -135,22 +139,10 @@ class NetCdfTimedWriter(fm.TimeComponent):
         # adding time and var data to the first timestamp
         for var in self.variables:
             data = self.connector.in_data[var.io_name].magnitude
-            grid = self.inputs[var.name].info.grid
             if var.static:
-                if self._force_axes_reversed and not grid.axes_reversed:
-                    # Transpose data if axes need to be reversed
-                    self.dataset[var.name][...] = np.transpose(data)
-                else:
-                    self.dataset[var.name][...] = data
+                self.dataset[var.name][...] = data
             else:
-                if self._force_axes_reversed and not grid.axes_reversed:
-                    # Transpose data if axes need to be reversed
-                    self.dataset[var.name][self.timestamp_counter, ...] = np.transpose(
-                        data
-                    )
-                else:
-                    self.dataset[var.name][self.timestamp_counter, ...] = data
-
+                self.dataset[var.name][self.timestamp_counter, ...] = data
         if self.time_var:
             current_date = date2num(self._time, self.dataset[self.time_var].units)
             self.dataset[self.time_var][self.timestamp_counter] = current_date
@@ -254,13 +246,16 @@ class NetCdfStaticWriter(fm.Component):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                name=var.io_name,
-                time=None,
-                grid=grid,
-                units=units,
-                static=var.static,
-                mask=var.mask,
-                **var.get_meta(),
+                io=NetCDFInput(
+                    name=var.io_name,
+                    time=None,
+                    grid=grid,
+                    units=units,
+                    static=var.static,
+                    mask=var.mask,
+                    force_axes_reversed=self._force_axes_reversed,
+                    **var.get_meta(),
+                ),
             )
 
         self.dataset = Dataset(self._path, "w")
@@ -285,16 +280,7 @@ class NetCdfStaticWriter(fm.Component):
 
         # adding time and var data to the first timestamp
         for var in self.variables:
-            grid = self.inputs[var.name].info.grid
-            if self._force_axes_reversed and not grid.axes_reversed:
-                # Transpose data if axes need to be reversed
-                self.dataset[var.name][...] = np.transpose(
-                    self.connector.in_data[var.io_name].magnitude
-                )
-            else:
-                self.dataset[var.name][...] = self.connector.in_data[
-                    var.io_name
-                ].magnitude
+            self.dataset[var.name][...] = self.connector.in_data[var.io_name].magnitude
 
     def _validate(self):
         pass
@@ -398,13 +384,14 @@ class NetCdfPushWriter(fm.Component):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                io=fm.CallbackInput(
+                io=NetCDFCallbackInput(
                     name=var.io_name,
                     callback=partial(self._data_changed, var.io_name),
                     time=None,
                     grid=grid,
                     units=units,
                     mask=var.mask,
+                    force_axes_reversed=self._force_axes_reversed,
                     **var.get_meta(),
                 )
             )
@@ -434,12 +421,7 @@ class NetCdfPushWriter(fm.Component):
         # adding time and var data to the first timestamp
         for var in self.variables:
             data = self.connector.in_data[var.io_name].magnitude
-            grid = self.inputs[var.name].info.grid
-            if self._force_axes_reversed and not grid.axes_reversed:
-                # Transpose data if axes need to be reversed
-                self.dataset[var.name][self.timestamp_counter, ...] = np.transpose(data)
-            else:
-                self.dataset[var.name][self.timestamp_counter, ...] = data
+            self.dataset[var.name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
@@ -483,12 +465,7 @@ class NetCdfPushWriter(fm.Component):
 
         for var in self.variables:
             data = self.inputs[var.io_name].pull_data(time).magnitude
-            grid = self.inputs[var.name].info.grid
-            if self._force_axes_reversed and not grid.axes_reversed:
-                # Transpose data if axes need to be reversed
-                self.dataset[var.name][self.timestamp_counter, ...] = np.transpose(data)
-            else:
-                self.dataset[var.name][self.timestamp_counter, ...] = data
+            self.dataset[var.name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
