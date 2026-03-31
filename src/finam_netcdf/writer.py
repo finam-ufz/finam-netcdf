@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from functools import partial
 
 import finam as fm
+import numpy as np
 from netCDF4 import Dataset, date2num
 
 from .tools import create_nc_framework, create_variable_list, set_default_mask
@@ -52,6 +53,9 @@ class NetCdfTimedWriter(fm.TimeComponent):
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from input
             * valid boolean mask for MaskedArray
+
+    force_axes_reversed : bool, optional
+        forces reversed axes order, i.e. (zyx), for compatibility with external tools that rely on CF conventions order.
     """
 
     def __init__(
@@ -62,6 +66,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         time_var="time",
         global_attrs=None,
         mask=fm.Mask.FLEX,
+        force_axes_reversed=False,
     ):
         super().__init__()
 
@@ -69,6 +74,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
             raise ValueError("Step must be None or of type timedelta")
 
         self._path = path
+        self._force_axes_reversed = force_axes_reversed
         self.mask = mask
         self.variables = create_variable_list(inputs)
         set_default_mask(self.variables, self.mask)
@@ -129,10 +135,22 @@ class NetCdfTimedWriter(fm.TimeComponent):
         # adding time and var data to the first timestamp
         for var in self.variables:
             data = self.connector.in_data[var.io_name].magnitude
+            grid = self.inputs[var.name].info.grid
             if var.static:
-                self.dataset[var.name][...] = data
+                if self._force_axes_reversed and not grid.axes_reversed:
+                    # Transpose data if axes need to be reversed
+                    self.dataset[var.name][...] = np.transpose(data)
+                else:
+                    self.dataset[var.name][...] = data
             else:
-                self.dataset[var.name][self.timestamp_counter, ...] = data
+                if self._force_axes_reversed and not grid.axes_reversed:
+                    # Transpose data if axes need to be reversed
+                    self.dataset[var.name][self.timestamp_counter, ...] = np.transpose(
+                        data
+                    )
+                else:
+                    self.dataset[var.name][self.timestamp_counter, ...] = data
+
         if self.time_var:
             current_date = date2num(self._time, self.dataset[self.time_var].units)
             self.dataset[self.time_var][self.timestamp_counter] = current_date
@@ -195,6 +213,9 @@ class NetCdfStaticWriter(fm.Component):
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from input
             * valid boolean mask for MaskedArray
+
+    force_axes_reversed : bool, optional
+        forces reversed axes order, i.e. (zyx), for compatibility with external tools that rely on CF conventions order.
     """
 
     def __init__(
@@ -203,10 +224,12 @@ class NetCdfStaticWriter(fm.Component):
         inputs,
         global_attrs=None,
         mask=fm.Mask.FLEX,
+        force_axes_reversed=False,
     ):
         super().__init__()
 
         self._path = path
+        self._force_axes_reversed = force_axes_reversed
         self.mask = mask
         self.variables = create_variable_list(inputs)
         set_default_mask(self.variables, self.mask)
@@ -262,7 +285,16 @@ class NetCdfStaticWriter(fm.Component):
 
         # adding time and var data to the first timestamp
         for var in self.variables:
-            self.dataset[var.name][...] = self.connector.in_data[var.io_name].magnitude
+            grid = self.inputs[var.name].info.grid
+            if self._force_axes_reversed and not grid.axes_reversed:
+                # Transpose data if axes need to be reversed
+                self.dataset[var.name][...] = np.transpose(
+                    self.connector.in_data[var.io_name].magnitude
+                )
+            else:
+                self.dataset[var.name][...] = self.connector.in_data[
+                    var.io_name
+                ].magnitude
 
     def _validate(self):
         pass
@@ -315,6 +347,9 @@ class NetCdfPushWriter(fm.Component):
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from input
             * valid boolean mask for MaskedArray
+
+    force_axes_reversed : bool, optional
+        forces reversed axes order, i.e. (zyx), for compatibility with external tools that rely on CF conventions order.
     """
 
     def __init__(
@@ -325,10 +360,12 @@ class NetCdfPushWriter(fm.Component):
         time_unit="seconds",
         global_attrs=None,
         mask=fm.Mask.FLEX,
+        force_axes_reversed=False,
     ):
         super().__init__()
 
         self._path = path
+        self._force_axes_reversed = force_axes_reversed
         self.mask = mask
         self.variables = create_variable_list(inputs)
         set_default_mask(self.variables, self.mask)
@@ -397,7 +434,12 @@ class NetCdfPushWriter(fm.Component):
         # adding time and var data to the first timestamp
         for var in self.variables:
             data = self.connector.in_data[var.io_name].magnitude
-            self.dataset[var.name][self.timestamp_counter, ...] = data
+            grid = self.inputs[var.name].info.grid
+            if self._force_axes_reversed and not grid.axes_reversed:
+                # Transpose data if axes need to be reversed
+                self.dataset[var.name][self.timestamp_counter, ...] = np.transpose(data)
+            else:
+                self.dataset[var.name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
@@ -441,7 +483,12 @@ class NetCdfPushWriter(fm.Component):
 
         for var in self.variables:
             data = self.inputs[var.io_name].pull_data(time).magnitude
-            self.dataset[var.name][self.timestamp_counter, ...] = data
+            grid = self.inputs[var.name].info.grid
+            if self._force_axes_reversed and not grid.axes_reversed:
+                # Transpose data if axes need to be reversed
+                self.dataset[var.name][self.timestamp_counter, ...] = np.transpose(data)
+            else:
+                self.dataset[var.name][self.timestamp_counter, ...] = data
 
         self.timestamp_counter += 1
 
