@@ -39,16 +39,6 @@ class NetCDFInput(fm.sdk.Input):
             if not isinstance(info, fm.Info):
                 raise fm.errors.FinamMetaDataError("Metadata must be of type Info")
 
-        if (
-            self._force_axes_reversed
-            and isinstance(info.grid, fm.StructureGrid)
-            and not info.grid.axes_reversed
-        ):
-            grid = info.grid.copy()
-            grid._axes_reversed = True
-            grid._data_shape = None
-            info = info.copy_with(grid=grid)
-
         src_info = self._source.get_info(info)
 
         with fm.tools.log_helper.ErrorLogger(self.logger):
@@ -67,6 +57,17 @@ class NetCDFInput(fm.sdk.Input):
         self._input_info = src_info.copy_with(
             use_none=False, time=info.time, grid=info.grid, mask=info.mask, **info.meta
         )
+
+        if (
+            self._force_axes_reversed
+            and not isinstance(self._input_info, fm.UnstructuredGrid)
+            and not self._input_info.grid.axes_reversed
+        ):
+            grid = self._input_info.grid.copy()
+            grid._axes_reversed = True
+            grid._data_shape = None
+            self._input_info.grid = grid
+
         self._in_info_exchanged = True
         with fm.tools.log_helper.ErrorLogger(self.logger):
             self._transform = src_info.grid.get_transform_to(self._input_info.grid)
@@ -120,16 +121,6 @@ class NetCDFCallbackInput(fm.sdk.CallbackInput):
             if not isinstance(info, fm.Info):
                 raise fm.errors.FinamMetaDataError("Metadata must be of type Info")
 
-        if (
-            self._force_axes_reversed
-            and isinstance(info.grid, fm.StructureGrid)
-            and not info.grid.axes_reversed
-        ):
-            grid = info.grid.copy()
-            grid._axes_reversed = True
-            grid._data_shape = None
-            info = info.copy_with(grid=grid)
-
         src_info = self._source.get_info(info)
 
         with fm.tools.log_helper.ErrorLogger(self.logger):
@@ -148,6 +139,17 @@ class NetCDFCallbackInput(fm.sdk.CallbackInput):
         self._input_info = src_info.copy_with(
             use_none=False, time=info.time, grid=info.grid, mask=info.mask, **info.meta
         )
+
+        if (
+            self._force_axes_reversed
+            and not isinstance(self._input_info, fm.UnstructuredGrid)
+            and not self._input_info.grid.axes_reversed
+        ):
+            grid = self._input_info.grid.copy()
+            grid._axes_reversed = True
+            grid._data_shape = None
+            self._input_info.grid = grid
+
         self._in_info_exchanged = True
         with fm.tools.log_helper.ErrorLogger(self.logger):
             self._transform = src_info.grid.get_transform_to(self._input_info.grid)
