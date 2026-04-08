@@ -1,7 +1,11 @@
+"""
+Custom input classes to transform grids to reversed axes.
+"""
+
 import finam as fm
 
 
-class NetCDFInput(fm.sdk.Input):
+class _NetCDFInput(fm.sdk.Input):
 
     def __init__(
         self, name, info=None, static=False, force_axes_reversed=False, **info_kwargs
@@ -77,7 +81,7 @@ class NetCDFInput(fm.sdk.Input):
         return self._input_info
 
 
-class NetCDFCallbackInput(fm.sdk.CallbackInput):
+class _NetCDFCallbackInput(fm.sdk.CallbackInput):
 
     def __init__(
         self,

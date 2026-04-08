@@ -6,10 +6,9 @@ from datetime import datetime, timedelta
 from functools import partial
 
 import finam as fm
-import numpy as np
 from netCDF4 import Dataset, date2num
 
-from .input import NetCDFCallbackInput, NetCDFInput
+from .input import _NetCDFCallbackInput, _NetCDFInput
 from .tools import create_nc_framework, create_variable_list, set_default_mask
 
 
@@ -103,7 +102,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                io=NetCDFInput(
+                io=_NetCDFInput(
                     name=var.io_name,
                     time=self.time,
                     grid=grid,
@@ -246,7 +245,7 @@ class NetCdfStaticWriter(fm.Component):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                io=NetCDFInput(
+                io=_NetCDFInput(
                     name=var.io_name,
                     time=None,
                     grid=grid,
@@ -384,7 +383,7 @@ class NetCdfPushWriter(fm.Component):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                io=NetCDFCallbackInput(
+                io=_NetCDFCallbackInput(
                     name=var.io_name,
                     callback=partial(self._data_changed, var.io_name),
                     time=None,
