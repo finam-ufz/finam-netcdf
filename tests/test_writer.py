@@ -107,6 +107,64 @@ class TestWriter(unittest.TestCase):
 
             dataset.close()
 
+    def test_writer_reverse_axes_uniform(self):
+        self._test_writer_reverse_axes(False)
+
+    def test_writer_reverse_axes_rectilinear(self):
+        self._test_writer_reverse_axes(True)
+
+    def _test_writer_reverse_axes(self, rectilinear):
+        grid = UniformGrid((10, 5), data_location="POINTS")
+        if rectilinear:
+            grid = grid.to_rectilinear()
+
+        with TemporaryDirectory() as tmp:
+            file = path.join(tmp, "test.nc")
+
+            source1 = CallbackGenerator(
+                callbacks={
+                    "Grid": (lambda t: generate_grid(grid), Info(None, grid, units="m"))
+                },
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
+            source2 = CallbackGenerator(
+                callbacks={
+                    "Grid": (lambda t: generate_grid(grid), Info(None, grid, units="m"))
+                },
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
+
+            writer = NetCdfTimedWriter(
+                path=file,
+                inputs=["lai", "lai2"],
+                step=timedelta(days=1),
+                force_axes_reversed=True,
+            )
+
+            composition = Composition([source1, source2, writer])
+
+            source1.outputs["Grid"] >> writer.inputs["lai"]
+            source2.outputs["Grid"] >> writer.inputs["lai2"]
+
+            composition.run(end_time=datetime(2000, 1, 31))
+
+            self.assertTrue(os.path.isfile(file))
+            dataset = Dataset(file)
+
+            lai = dataset["lai"]
+            dims = list(lai.dimensions)
+
+            self.assertEqual(dims, ["time", "y", "x"])
+            self.assertEqual(lai.shape, (31, 5, 10))
+
+            times = dataset["time"][:]
+            self.assertEqual(times[0], 0.0)
+            self.assertEqual(times[-1], 30.0)
+
+            dataset.close()
+
     def test_static_writer(self):
         grid = UniformGrid((10, 5), data_location="POINTS")
 

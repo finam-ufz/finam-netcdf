@@ -183,7 +183,7 @@ def _revert_axes(grid):
             axes_reversed=True,
             axes_attributes=grid.axes_attributes,
             axes_names=grid.axes_names,
-            crs=grid.axes_names,
+            crs=grid.crs,
         )
 
     raise ValueError("unsupported grid class")  # unreachable
