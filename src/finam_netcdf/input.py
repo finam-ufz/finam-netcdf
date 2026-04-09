@@ -67,10 +67,7 @@ class _NetCDFInput(fm.sdk.Input):
             and not isinstance(self._input_info, fm.UnstructuredGrid)
             and not self._input_info.grid.axes_reversed
         ):
-            grid = self._input_info.grid.copy()
-            grid._axes_reversed = True
-            grid._data_shape = None
-            self._input_info.grid = grid
+            self._input_info.grid = _revert_axes(self._input_info.grid)
 
         self._in_info_exchanged = True
         with fm.tools.log_helper.ErrorLogger(self.logger):
@@ -149,10 +146,7 @@ class _NetCDFCallbackInput(fm.sdk.CallbackInput):
             and not isinstance(self._input_info, fm.UnstructuredGrid)
             and not self._input_info.grid.axes_reversed
         ):
-            grid = self._input_info.grid.copy()
-            grid._axes_reversed = True
-            grid._data_shape = None
-            self._input_info.grid = grid
+            self._input_info.grid = _revert_axes(self._input_info.grid)
 
         self._in_info_exchanged = True
         with fm.tools.log_helper.ErrorLogger(self.logger):
@@ -161,3 +155,35 @@ class _NetCDFCallbackInput(fm.sdk.CallbackInput):
         # pylint: disable-next=fixme
         # TODO: check if this is correct (was src_info before)
         return self._input_info
+
+
+def _revert_axes(grid):
+    if isinstance(grid, fm.EsriGrid):
+        return grid  # EsriGrid is always axes_reversed
+
+    if isinstance(grid, fm.UniformGrid):
+        return fm.UniformGrid(
+            grid.dims,
+            spacing=grid.spacing,
+            origin=grid.origin,
+            data_location=grid.data_location,
+            order=grid.order,
+            axes_reversed=True,
+            axes_increase=grid.axes_increase,
+            axes_attributes=grid.axes_attributes,
+            axes_names=grid.axes_names,
+            crs=grid.crs,
+        )
+
+    if isinstance(grid, fm.RectilinearGrid):
+        return fm.RectilinearGrid(
+            axes=grid.axes,
+            data_location=grid.data_location,
+            order=grid.order,
+            axes_reversed=True,
+            axes_attributes=grid.axes_attributes,
+            axes_names=grid.axes_names,
+            crs=grid.axes_names,
+        )
+
+    raise ValueError("unsupported grid class")  # unreachable
