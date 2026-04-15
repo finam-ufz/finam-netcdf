@@ -506,19 +506,32 @@ class Variable:
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: constant mask will be determined from the data
 
+    crs : str or None or Ellipsis, optional
+        Coordinate reference system to force for the variable.
+        Either a CRS string like `EPSG:3035`, `None` for no CRS, or :any:`Ellipsis`
+        to use the CRS from the NetCDF file. Optional.
+
     **info_kwargs
         Optional keyword arguments to instantiate an Info object (i.e. 'grid' and 'meta')
         Used to overwrite meta data, to change units or to provide a desired grid specification.
     """
 
     def __init__(
-        self, name, io_name=None, slices=None, static=None, mask=..., **info_kwargs
+        self,
+        name,
+        io_name=None,
+        slices=None,
+        static=None,
+        mask=...,
+        crs=...,
+        **info_kwargs,
     ):
         self.name = name
         self.io_name = io_name or name
         self.slices = slices or {}
         self.static = static
         self.mask = mask
+        self.crs = crs
         self.info_kwargs = info_kwargs
 
     def get_meta(self):
@@ -534,14 +547,15 @@ class Variable:
         return meta
 
     def __repr__(self):
-        name, io_name, slices, static, mask = (
+        name, io_name, slices, static, mask, crs = (
             self.name,
             self.io_name,
             self.slices,
             self.static,
             self.mask,
+            self.crs,
         )
-        return f"Variable({name=}, {io_name=}, {slices=}, {static=}, {mask=}, **{self.info_kwargs})"
+        return f"Variable({name=}, {io_name=}, {slices=}, {static=}, {mask=}, {crs=}, **{self.info_kwargs})"
 
 
 def create_variable_list(variables):
@@ -675,7 +689,7 @@ def extract_time(dataset):
     return None if info.all_static else next(iter(info.time))
 
 
-def extract_info(dataset, variable, current_time=None):
+def extract_info(dataset, variable, crs, current_time=None):
     """Extracts the Info object for the selected variable.
 
     Parameters
@@ -711,13 +725,7 @@ def extract_info(dataset, variable, current_time=None):
         # use provided grid from variable object if present
         grid = variable.info_kwargs["grid"]
     else:
-        crs = None
-        data_var = dataset.variables[variable.name]
-        if hasattr(data_var, "grid_mapping"):
-            mapping = getattr(data_var, "grid_mapping")
-            crs_var = dataset.variables[mapping]
-            crs_dict = {attr: getattr(crs_var, attr) for attr in crs_var.ncattrs()}
-            crs = CRS.from_cf(crs_dict)
+        crs = _get_crs(dataset, variable, crs)
 
         if mesh is not None:
             # NOTE: warn about slices being ignored for mesh-based grids
@@ -786,6 +794,29 @@ def extract_info(dataset, variable, current_time=None):
                 )
 
     return fm.Info(time=current_time, grid=grid, meta=meta, mask=variable.mask)
+
+
+def _get_crs(dataset, variable, crs):
+    """Gets the CRS from either the dataset or the variable's CRS"""
+
+    if variable.crs is not Ellipsis:
+        # Overwrite with variable's value
+        crs = variable.crs
+
+    if crs is None:
+        return None
+
+    if crs is Ellipsis:
+        crs_value = None
+        data_var = dataset.variables[variable.name]
+        if hasattr(data_var, "grid_mapping"):
+            mapping = getattr(data_var, "grid_mapping")
+            crs_var = dataset.variables[mapping]
+            crs_dict = {attr: getattr(crs_var, attr) for attr in crs_var.ncattrs()}
+            crs_value = CRS.from_cf(crs_dict)
+        return crs_value
+
+    return CRS.from_user_input(crs)
 
 
 def set_mask(info, data, dataset, variable):
