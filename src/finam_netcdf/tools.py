@@ -6,6 +6,7 @@ import fnmatch
 import finam as fm
 import numpy as np
 from netCDF4 import num2date
+from pyproj import CRS
 
 MASK_TBD = None
 """Indicator that the mask is to be determined."""
@@ -760,6 +761,15 @@ def extract_info(dataset, variable, current_time=None):
                 axes_attributes=axes_attrs,
             )
         else:
+
+            crs = None
+            data_var = dataset.variables[variable.name]
+            if hasattr(data_var, "grid_mapping"):
+                mapping = getattr(data_var, "grid_mapping")
+                crs_var = dataset.variables[mapping]
+                crs_dict = {attr: getattr(crs_var, attr) for attr in crs_var.ncattrs()}
+                crs = CRS.from_cf(crs_dict)
+
             # NOTE: we use point-associated data here and
             #       convert it to cell-associated in the grid
             rec_axes = _create_rec_axes(axes, ax_bnds)
@@ -769,6 +779,7 @@ def extract_info(dataset, variable, current_time=None):
                 data_location=fm.Location.CELLS,
                 axes_reversed=axes_reversed,
                 axes_attributes=axes_attrs,
+                crs=crs,
             )
 
     return fm.Info(time=current_time, grid=grid, meta=meta, mask=variable.mask)
