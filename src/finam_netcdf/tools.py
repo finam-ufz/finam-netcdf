@@ -1474,8 +1474,19 @@ def create_nc_framework(
         mesh_registry.append(entry)
         return entry
 
+    crs_registry = []
+
     for var in variables:
         grid = in_infos[var.io_name].grid
+        crs_index = -1
+        if grid.crs is not None:
+            crs = CRS.from_user_input(grid.crs)
+            try:
+                crs_index = crs_registry.index(crs)
+            except ValueError:
+                crs_index = len(crs_registry)
+                crs_registry.append(crs)
+
         if isinstance(grid, fm.data.StructuredGrid):
             axes_names = (
                 tuple(reversed(grid.axes_names))
@@ -1502,6 +1513,8 @@ def create_nc_framework(
             ncvar = dataset.createVariable(var.name, dtype, dim)
             meta = in_infos[var.io_name].meta
             ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
+            if grid.crs is not None:
+                ncvar.setncatts({"grid_mapping": f"crs_{crs_index}"})
 
         elif isinstance(grid, fm.UnstructuredGrid):
             mesh_info = _get_mesh_info(grid)
@@ -1522,7 +1535,25 @@ def create_nc_framework(
             meta["mesh"] = mesh_info["mesh_name"]
             meta["location"] = location
             ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
+            if grid.crs is not None:
+                ncvar.setncatts({"grid_mapping": f"crs_{crs_index}"})
 
         else:
             msg = f"NetCDF: {var.name} is not given on a supported grid."
             raise ValueError(msg)
+
+    for i, crs in enumerate(crs_registry):
+        crs_var = dataset.createVariable(f"crs_{i}", "i4")
+
+        # Write WKT
+        crs_var.spatial_ref = crs.to_wkt()
+        crs_var.crs_wkt = crs.to_wkt()
+
+        # Write CF projection parameters
+        cf = crs.to_cf()
+        for key, value in cf.items():
+            setattr(crs_var, key, value)
+
+        # EPSG code
+        if crs.to_epsg() is not None:
+            crs_var.epsg_code = f"EPSG:{crs.to_epsg()}"
