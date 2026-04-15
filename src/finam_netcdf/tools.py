@@ -1488,10 +1488,13 @@ def create_nc_framework(
                 crs_registry.append(crs)
 
         if isinstance(grid, fm.data.StructuredGrid):
-            axes_names = (
-                tuple(reversed(grid.axes_names))
+            axes_names = tuple(
+                reversed(grid.axes_names) if grid.axes_reversed else grid.axes_names
+            )
+            indices = tuple(
+                reversed(range(len(grid.axes_names)))
                 if grid.axes_reversed
-                else tuple(grid.axes_names)
+                else range(len(grid.axes_names))
             )
 
             for i, ax in enumerate(axes_names):
@@ -1503,8 +1506,8 @@ def create_nc_framework(
                     raise ValueError("NetCDF: can't add different axes with same name.")
                 dataset.createDimension(ax, len(grid.data_axes[i]))
                 dataset.createVariable(ax, grid.data_axes[i].dtype, (ax,))
-                dataset[ax].setncatts(grid.axes_attributes[i])
-                dataset[ax].setncattr("axis", "XYZ"[i])
+                dataset[ax].setncatts(grid.axes_attributes[indices[i]])
+                dataset[ax].setncattr("axis", "XYZ"[indices[i]])
                 dataset[ax][:] = grid.data_axes[i]
                 # add axis bounds if data location is cells
 
