@@ -8,6 +8,7 @@ from functools import partial
 import finam as fm
 from netCDF4 import Dataset, date2num
 
+from .input import _NetCDFCallbackInput, _NetCDFInput
 from .tools import create_nc_framework, create_variable_list, set_default_mask
 
 
@@ -52,6 +53,9 @@ class NetCdfTimedWriter(fm.TimeComponent):
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from input
             * valid boolean mask for MaskedArray
+
+    force_axes_reversed : bool, optional
+        forces reversed axes order, i.e. (zyx), for compatibility with external tools that rely on CF conventions order.
     """
 
     def __init__(
@@ -62,6 +66,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
         time_var="time",
         global_attrs=None,
         mask=fm.Mask.FLEX,
+        force_axes_reversed=False,
     ):
         super().__init__()
 
@@ -69,6 +74,7 @@ class NetCdfTimedWriter(fm.TimeComponent):
             raise ValueError("Step must be None or of type timedelta")
 
         self._path = path
+        self._force_axes_reversed = force_axes_reversed
         self.mask = mask
         self.variables = create_variable_list(inputs)
         set_default_mask(self.variables, self.mask)
@@ -96,13 +102,16 @@ class NetCdfTimedWriter(fm.TimeComponent):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                name=var.io_name,
-                time=self.time,
-                grid=grid,
-                units=units,
-                static=var.static,
-                mask=var.mask,
-                **var.get_meta(),
+                io=_NetCDFInput(
+                    name=var.io_name,
+                    time=self.time,
+                    grid=grid,
+                    units=units,
+                    static=var.static,
+                    mask=var.mask,
+                    force_axes_reversed=self._force_axes_reversed,
+                    **var.get_meta(),
+                ),
             )
 
         self.dataset = Dataset(self._path, "w")
@@ -195,6 +204,9 @@ class NetCdfStaticWriter(fm.Component):
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from input
             * valid boolean mask for MaskedArray
+
+    force_axes_reversed : bool, optional
+        forces reversed axes order, i.e. (zyx), for compatibility with external tools that rely on CF conventions order.
     """
 
     def __init__(
@@ -203,10 +215,12 @@ class NetCdfStaticWriter(fm.Component):
         inputs,
         global_attrs=None,
         mask=fm.Mask.FLEX,
+        force_axes_reversed=False,
     ):
         super().__init__()
 
         self._path = path
+        self._force_axes_reversed = force_axes_reversed
         self.mask = mask
         self.variables = create_variable_list(inputs)
         set_default_mask(self.variables, self.mask)
@@ -231,13 +245,16 @@ class NetCdfStaticWriter(fm.Component):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                name=var.io_name,
-                time=None,
-                grid=grid,
-                units=units,
-                static=var.static,
-                mask=var.mask,
-                **var.get_meta(),
+                io=_NetCDFInput(
+                    name=var.io_name,
+                    time=None,
+                    grid=grid,
+                    units=units,
+                    static=var.static,
+                    mask=var.mask,
+                    force_axes_reversed=self._force_axes_reversed,
+                    **var.get_meta(),
+                ),
             )
 
         self.dataset = Dataset(self._path, "w")
@@ -315,6 +332,9 @@ class NetCdfPushWriter(fm.Component):
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from input
             * valid boolean mask for MaskedArray
+
+    force_axes_reversed : bool, optional
+        forces reversed axes order, i.e. (zyx), for compatibility with external tools that rely on CF conventions order.
     """
 
     def __init__(
@@ -325,10 +345,12 @@ class NetCdfPushWriter(fm.Component):
         time_unit="seconds",
         global_attrs=None,
         mask=fm.Mask.FLEX,
+        force_axes_reversed=False,
     ):
         super().__init__()
 
         self._path = path
+        self._force_axes_reversed = force_axes_reversed
         self.mask = mask
         self.variables = create_variable_list(inputs)
         set_default_mask(self.variables, self.mask)
@@ -361,13 +383,14 @@ class NetCdfPushWriter(fm.Component):
             grid = var.info_kwargs.get("grid", None)
             units = var.info_kwargs.get("units", None)
             self.inputs.add(
-                io=fm.CallbackInput(
+                io=_NetCDFCallbackInput(
                     name=var.io_name,
                     callback=partial(self._data_changed, var.io_name),
                     time=None,
                     grid=grid,
                     units=units,
                     mask=var.mask,
+                    force_axes_reversed=self._force_axes_reversed,
                     **var.get_meta(),
                 )
             )
