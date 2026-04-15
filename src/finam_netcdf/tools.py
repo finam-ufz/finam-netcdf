@@ -710,77 +710,80 @@ def extract_info(dataset, variable, current_time=None):
     if "grid" in variable.info_kwargs:
         # use provided grid from variable object if present
         grid = variable.info_kwargs["grid"]
-    elif mesh is not None:
-        # NOTE: warn about slices being ignored for mesh-based grids
-        # NOTE: deal with transects on meshes
-        grid = _create_mesh(dataset, mesh, location, info)
     else:
-        # checks if axes were reversed or not
-        ax_names = [
-            ax
-            for ax in info.data_spatial_dims_map[variable.name]
-            if ax not in variable.slices
-        ]
-        order = info.get_axes_order(ax_names)
-        axes_reversed = check_order_reversed(order)
-        if axes_reversed:
-            ax_names = ax_names[::-1]  # xyz order now
+        crs = None
+        data_var = dataset.variables[variable.name]
+        if hasattr(data_var, "grid_mapping"):
+            mapping = getattr(data_var, "grid_mapping")
+            crs_var = dataset.variables[mapping]
+            crs_dict = {attr: getattr(crs_var, attr) for attr in crs_var.ncattrs()}
+            crs = CRS.from_cf(crs_dict)
 
-        # this needs some work with the respective grid to be created correctly
-        if is_transect(order):
-            msg = f"NetCDF: {order} transect slices are not supported at the moment."
-            raise ValueError(msg)
-
-        # getting coordinates data
-        axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
-        # _FillValue and missing_value not allowed for coordinates
-        axes_attrs = [
-            {
-                name: dataset.variables[ax].getncattr(name)
-                for name in dataset.variables[ax].ncattrs()
-                if name not in ["_FillValue", "missing_value"]
-            }
-            for ax in ax_names
-        ]
-        ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
-        ax_bnds = [
-            (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
-            for axb in ax_bnds_names
-        ]
-
-        if _check_axes_uniform(axes, ax_bnds):
-            dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
-            grid = fm.UniformGrid(
-                dims=dims,
-                spacing=spacing,
-                origin=origin,
-                data_location=fm.Location.CELLS,
-                axes_names=ax_names,
-                axes_increase=ax_inc,
-                axes_reversed=axes_reversed,
-                axes_attributes=axes_attrs,
-            )
+        if mesh is not None:
+            # NOTE: warn about slices being ignored for mesh-based grids
+            # NOTE: deal with transects on meshes
+            grid = _create_mesh(dataset, mesh, location, info, crs)
         else:
+            # checks if axes were reversed or not
+            ax_names = [
+                ax
+                for ax in info.data_spatial_dims_map[variable.name]
+                if ax not in variable.slices
+            ]
+            order = info.get_axes_order(ax_names)
+            axes_reversed = check_order_reversed(order)
+            if axes_reversed:
+                ax_names = ax_names[::-1]  # xyz order now
 
-            crs = None
-            data_var = dataset.variables[variable.name]
-            if hasattr(data_var, "grid_mapping"):
-                mapping = getattr(data_var, "grid_mapping")
-                crs_var = dataset.variables[mapping]
-                crs_dict = {attr: getattr(crs_var, attr) for attr in crs_var.ncattrs()}
-                crs = CRS.from_cf(crs_dict)
+            # this needs some work with the respective grid to be created correctly
+            if is_transect(order):
+                msg = (
+                    f"NetCDF: {order} transect slices are not supported at the moment."
+                )
+                raise ValueError(msg)
 
-            # NOTE: we use point-associated data here and
-            #       convert it to cell-associated in the grid
-            rec_axes = _create_rec_axes(axes, ax_bnds)
-            grid = fm.RectilinearGrid(
-                axes=rec_axes,
-                axes_names=ax_names,
-                data_location=fm.Location.CELLS,
-                axes_reversed=axes_reversed,
-                axes_attributes=axes_attrs,
-                crs=crs,
-            )
+            # getting coordinates data
+            axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
+            # _FillValue and missing_value not allowed for coordinates
+            axes_attrs = [
+                {
+                    name: dataset.variables[ax].getncattr(name)
+                    for name in dataset.variables[ax].ncattrs()
+                    if name not in ["_FillValue", "missing_value"]
+                }
+                for ax in ax_names
+            ]
+            ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
+            ax_bnds = [
+                (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
+                for axb in ax_bnds_names
+            ]
+
+            if _check_axes_uniform(axes, ax_bnds):
+                dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
+                grid = fm.UniformGrid(
+                    dims=dims,
+                    spacing=spacing,
+                    origin=origin,
+                    data_location=fm.Location.CELLS,
+                    axes_names=ax_names,
+                    axes_increase=ax_inc,
+                    axes_reversed=axes_reversed,
+                    axes_attributes=axes_attrs,
+                    crs=crs,
+                )
+            else:
+                # NOTE: we use point-associated data here and
+                #       convert it to cell-associated in the grid
+                rec_axes = _create_rec_axes(axes, ax_bnds)
+                grid = fm.RectilinearGrid(
+                    axes=rec_axes,
+                    axes_names=ax_names,
+                    data_location=fm.Location.CELLS,
+                    axes_reversed=axes_reversed,
+                    axes_attributes=axes_attrs,
+                    crs=crs,
+                )
 
     return fm.Info(time=current_time, grid=grid, meta=meta, mask=variable.mask)
 
@@ -920,7 +923,7 @@ def _create_rec_axes(axes, bnds):
     return [_create_point_axis(ax, bd) for ax, bd in zip(axes, bnds)]
 
 
-def _create_mesh(dataset, mesh_name, location, info):
+def _create_mesh(dataset, mesh_name, location, info, crs):
     if location not in MESH_LOCATIONS:
         msg = f"NetCDF: mesh data has invalid location: {location}."
         raise ValueError(msg)
@@ -968,6 +971,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             points=points,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     elif location == "edge":
         if mesh_dim < 1:
@@ -1010,6 +1014,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             data_location=fm.Location.CELLS,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     elif location == "face":
         if mesh_dim < 2:
@@ -1074,6 +1079,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             data_location=fm.Location.CELLS,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     else:
         # location is "volume" here
@@ -1158,6 +1164,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             data_location=fm.Location.CELLS,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     return grid
 
