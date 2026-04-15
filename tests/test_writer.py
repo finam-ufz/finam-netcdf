@@ -191,6 +191,17 @@ class TestWriter(unittest.TestCase):
             crs0 = dataset["crs_1"]
             self.assertEqual(crs0.epsg_code, "EPSG:4326")
 
+            x = dataset["x"]
+            self.assertEqual(x.axis, "X")
+            self.assertEqual(x.long_name, "Easting")
+            self.assertEqual(x.standard_name, "projection_x_coordinate")
+            self.assertEqual(x.units, "metre")
+            y = dataset["y"]
+            self.assertEqual(y.axis, "Y")
+            self.assertEqual(y.long_name, "Northing")
+            self.assertEqual(y.standard_name, "projection_y_coordinate")
+            self.assertEqual(y.units, "metre")
+
             times = dataset["time"][:]
             self.assertEqual(times[0], 0.0)
             self.assertEqual(times[-1], 30.0)
