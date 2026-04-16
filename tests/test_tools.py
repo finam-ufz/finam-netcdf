@@ -33,7 +33,7 @@ class TestTools(unittest.TestCase):
         time_var = "time"
         variable = Variable("lai", slices={"time": 0}, mask=fm.Mask.FLEX)
 
-        info = extract_info(dataset, variable)
+        info = extract_info(dataset, variable, ...)
         self.assertTrue(isinstance(info.grid, RectilinearGrid))
         self.assertEqual(info.grid.data_location, Location.CELLS)
         self.assertEqual(

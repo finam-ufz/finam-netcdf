@@ -114,23 +114,43 @@ class TestWriter(unittest.TestCase):
         self._test_writer_reverse_axes(True)
 
     def _test_writer_reverse_axes(self, rectilinear):
-        grid = UniformGrid((10, 5), data_location="POINTS")
+        grid1 = UniformGrid((10, 5), data_location="POINTS", crs="EPSG:3035")
+        grid2 = UniformGrid((10, 5), data_location="POINTS", crs="EPSG:4326")
+        grid3 = UniformGrid((10, 5), data_location="POINTS")
         if rectilinear:
-            grid = grid.to_rectilinear()
+            grid1 = grid1.to_rectilinear()
+            grid2 = grid2.to_rectilinear()
+            grid3 = grid3.to_rectilinear()
 
         with TemporaryDirectory() as tmp:
             file = path.join(tmp, "test.nc")
 
             source1 = CallbackGenerator(
                 callbacks={
-                    "Grid": (lambda t: generate_grid(grid), Info(None, grid, units="m"))
+                    "Grid": (
+                        lambda t: generate_grid(grid1),
+                        Info(None, grid1, units="m"),
+                    )
                 },
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
             )
             source2 = CallbackGenerator(
                 callbacks={
-                    "Grid": (lambda t: generate_grid(grid), Info(None, grid, units="m"))
+                    "Grid": (
+                        lambda t: generate_grid(grid2),
+                        Info(None, grid2, units="m"),
+                    )
+                },
+                start=datetime(2000, 1, 1),
+                step=timedelta(days=1),
+            )
+            source3 = CallbackGenerator(
+                callbacks={
+                    "Grid": (
+                        lambda t: generate_grid(grid3),
+                        Info(None, grid3, units="m"),
+                    )
                 },
                 start=datetime(2000, 1, 1),
                 step=timedelta(days=1),
@@ -138,15 +158,16 @@ class TestWriter(unittest.TestCase):
 
             writer = NetCdfTimedWriter(
                 path=file,
-                inputs=["lai", "lai2"],
+                inputs=["lai", "lai2", "lai3"],
                 step=timedelta(days=1),
                 force_axes_reversed=True,
             )
 
-            composition = Composition([source1, source2, writer])
+            composition = Composition([source1, source2, source3, writer])
 
             source1.outputs["Grid"] >> writer.inputs["lai"]
             source2.outputs["Grid"] >> writer.inputs["lai2"]
+            source3.outputs["Grid"] >> writer.inputs["lai3"]
 
             composition.run(end_time=datetime(2000, 1, 31))
 
@@ -158,6 +179,28 @@ class TestWriter(unittest.TestCase):
 
             self.assertEqual(dims, ["time", "y", "x"])
             self.assertEqual(lai.shape, (31, 5, 10))
+
+            lai2 = dataset["lai2"]
+            lai3 = dataset["lai3"]
+            self.assertEqual(lai.grid_mapping, "crs_0")
+            self.assertEqual(lai2.grid_mapping, "crs_1")
+            self.assertFalse(hasattr(lai3, "grid_mapping"))
+
+            crs0 = dataset["crs_0"]
+            self.assertEqual(crs0.epsg_code, "EPSG:3035")
+            crs0 = dataset["crs_1"]
+            self.assertEqual(crs0.epsg_code, "EPSG:4326")
+
+            x = dataset["x"]
+            self.assertEqual(x.axis, "X")
+            self.assertEqual(x.long_name, "Easting")
+            self.assertEqual(x.standard_name, "projection_x_coordinate")
+            self.assertEqual(x.units, "metre")
+            y = dataset["y"]
+            self.assertEqual(y.axis, "Y")
+            self.assertEqual(y.long_name, "Northing")
+            self.assertEqual(y.standard_name, "projection_y_coordinate")
+            self.assertEqual(y.units, "metre")
 
             times = dataset["time"][:]
             self.assertEqual(times[0], 0.0)

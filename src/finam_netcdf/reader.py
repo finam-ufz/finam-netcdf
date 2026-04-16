@@ -56,13 +56,21 @@ class NetCdfStaticReader(fm.Component):
             * :any:`finam.Mask.FLEX`: data can have a varying (default)
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: mask will be determined from the data
+
+    crs : str or None or Ellipsis, optional
+        Coordinate reference system to force for the variable.
+        Either a CRS string like `EPSG:3035`, `None` for no CRS, or :any:`Ellipsis`
+        to use the CRS from the NetCDF file.
+        Overwritten by individual variable CRS that is not :any:`Ellipsis`.
+        Optional.
     """
 
-    def __init__(self, path, outputs=None, mask=fm.Mask.FLEX):
+    def __init__(self, path, outputs=None, mask=fm.Mask.FLEX, crs=Ellipsis):
         super().__init__()
         self.path = path
         self.variables = outputs
         self.mask = mask
+        self.crs = crs
         self.dataset = None
         self._infos = None
         self._data = None
@@ -83,7 +91,7 @@ class NetCdfStaticReader(fm.Component):
             self._data = {}
             self._infos = {}
             for var in self.variables:
-                info = extract_info(self.dataset, var)
+                info = extract_info(self.dataset, var, self.crs)
                 data = extract_data(self.dataset, var)
                 data = set_mask(info, data, self.dataset, var)
                 self._infos[var.io_name] = info
@@ -157,6 +165,13 @@ class NetCdfReader(fm.TimeComponent):
             * :any:`finam.Mask.FLEX`: data can have a varying mask (default)
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: constant mask will be determined from the data
+
+    crs : str or None or Ellipsis, optional
+        Coordinate reference system to force for the variable.
+        Either a CRS string like `EPSG:3035`, `None` for no CRS, or :any:`Ellipsis`
+        to use the CRS from the NetCDF file.
+        Overwritten by individual variable CRS that is not :any:`Ellipsis`.
+        Optional.
     """
 
     def __init__(
@@ -167,6 +182,7 @@ class NetCdfReader(fm.TimeComponent):
         time_callback=None,
         time_location=None,
         mask=fm.Mask.FLEX,
+        crs=Ellipsis,
     ):
         super().__init__()
 
@@ -177,6 +193,7 @@ class NetCdfReader(fm.TimeComponent):
         self.time_limits = time_limits
         self.time_location = time_location
         self.mask = mask
+        self.crs = crs
         self.dataset = None
         self._init_data = {}
         self.output_infos = {}
@@ -245,7 +262,7 @@ class NetCdfReader(fm.TimeComponent):
             self.time_indices, self.time_index = [0], 0
 
         for var in self.variables:
-            info = extract_info(self.dataset, var, self._time)
+            info = extract_info(self.dataset, var, self.crs, self._time)
             data = extract_data(
                 self.dataset, var, self.time_var, self.time_indices[self.time_index]
             )

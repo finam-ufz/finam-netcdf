@@ -6,6 +6,7 @@ import fnmatch
 import finam as fm
 import numpy as np
 from netCDF4 import num2date
+from pyproj import CRS
 
 MASK_TBD = None
 """Indicator that the mask is to be determined."""
@@ -505,19 +506,32 @@ class Variable:
             * :any:`finam.Mask.NONE`: data is unmasked and given as plain numpy array
             * :any:`MASK_TBD`: constant mask will be determined from the data
 
+    crs : str or None or Ellipsis, optional
+        Coordinate reference system to force for the variable.
+        Either a CRS string like `EPSG:3035`, `None` for no CRS, or :any:`Ellipsis`
+        to use the CRS from the NetCDF file. Optional.
+
     **info_kwargs
         Optional keyword arguments to instantiate an Info object (i.e. 'grid' and 'meta')
         Used to overwrite meta data, to change units or to provide a desired grid specification.
     """
 
     def __init__(
-        self, name, io_name=None, slices=None, static=None, mask=..., **info_kwargs
+        self,
+        name,
+        io_name=None,
+        slices=None,
+        static=None,
+        mask=...,
+        crs=...,
+        **info_kwargs,
     ):
         self.name = name
         self.io_name = io_name or name
         self.slices = slices or {}
         self.static = static
         self.mask = mask
+        self.crs = crs
         self.info_kwargs = info_kwargs
 
     def get_meta(self):
@@ -533,14 +547,15 @@ class Variable:
         return meta
 
     def __repr__(self):
-        name, io_name, slices, static, mask = (
+        name, io_name, slices, static, mask, crs = (
             self.name,
             self.io_name,
             self.slices,
             self.static,
             self.mask,
+            self.crs,
         )
-        return f"Variable({name=}, {io_name=}, {slices=}, {static=}, {mask=}, **{self.info_kwargs})"
+        return f"Variable({name=}, {io_name=}, {slices=}, {static=}, {mask=}, {crs=}, **{self.info_kwargs})"
 
 
 def create_variable_list(variables):
@@ -674,7 +689,7 @@ def extract_time(dataset):
     return None if info.all_static else next(iter(info.time))
 
 
-def extract_info(dataset, variable, current_time=None):
+def extract_info(dataset, variable, crs, current_time=None):
     """Extracts the Info object for the selected variable.
 
     Parameters
@@ -709,69 +724,99 @@ def extract_info(dataset, variable, current_time=None):
     if "grid" in variable.info_kwargs:
         # use provided grid from variable object if present
         grid = variable.info_kwargs["grid"]
-    elif mesh is not None:
-        # NOTE: warn about slices being ignored for mesh-based grids
-        # NOTE: deal with transects on meshes
-        grid = _create_mesh(dataset, mesh, location, info)
     else:
-        # checks if axes were reversed or not
-        ax_names = [
-            ax
-            for ax in info.data_spatial_dims_map[variable.name]
-            if ax not in variable.slices
-        ]
-        order = info.get_axes_order(ax_names)
-        axes_reversed = check_order_reversed(order)
-        if axes_reversed:
-            ax_names = ax_names[::-1]  # xyz order now
+        crs = _get_crs(dataset, variable, crs)
 
-        # this needs some work with the respective grid to be created correctly
-        if is_transect(order):
-            msg = f"NetCDF: {order} transect slices are not supported at the moment."
-            raise ValueError(msg)
-
-        # getting coordinates data
-        axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
-        # _FillValue and missing_value not allowed for coordinates
-        axes_attrs = [
-            {
-                name: dataset.variables[ax].getncattr(name)
-                for name in dataset.variables[ax].ncattrs()
-                if name not in ["_FillValue", "missing_value"]
-            }
-            for ax in ax_names
-        ]
-        ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
-        ax_bnds = [
-            (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
-            for axb in ax_bnds_names
-        ]
-
-        if _check_axes_uniform(axes, ax_bnds):
-            dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
-            grid = fm.UniformGrid(
-                dims=dims,
-                spacing=spacing,
-                origin=origin,
-                data_location=fm.Location.CELLS,
-                axes_names=ax_names,
-                axes_increase=ax_inc,
-                axes_reversed=axes_reversed,
-                axes_attributes=axes_attrs,
-            )
+        if mesh is not None:
+            # NOTE: warn about slices being ignored for mesh-based grids
+            # NOTE: deal with transects on meshes
+            grid = _create_mesh(dataset, mesh, location, info, crs)
         else:
-            # NOTE: we use point-associated data here and
-            #       convert it to cell-associated in the grid
-            rec_axes = _create_rec_axes(axes, ax_bnds)
-            grid = fm.RectilinearGrid(
-                axes=rec_axes,
-                axes_names=ax_names,
-                data_location=fm.Location.CELLS,
-                axes_reversed=axes_reversed,
-                axes_attributes=axes_attrs,
-            )
+            # checks if axes were reversed or not
+            ax_names = [
+                ax
+                for ax in info.data_spatial_dims_map[variable.name]
+                if ax not in variable.slices
+            ]
+            order = info.get_axes_order(ax_names)
+            axes_reversed = check_order_reversed(order)
+            if axes_reversed:
+                ax_names = ax_names[::-1]  # xyz order now
+
+            # this needs some work with the respective grid to be created correctly
+            if is_transect(order):
+                msg = (
+                    f"NetCDF: {order} transect slices are not supported at the moment."
+                )
+                raise ValueError(msg)
+
+            # getting coordinates data
+            axes = [np.asarray(dataset.variables[ax][:]).copy() for ax in ax_names]
+            # _FillValue and missing_value not allowed for coordinates
+            axes_attrs = [
+                {
+                    name: dataset.variables[ax].getncattr(name)
+                    for name in dataset.variables[ax].ncattrs()
+                    if name not in ["_FillValue", "missing_value"]
+                }
+                for ax in ax_names
+            ]
+            ax_bnds_names = [attr.get("bounds", None) for attr in axes_attrs]
+            ax_bnds = [
+                (None if axb is None else np.asarray(dataset.variables[axb][:]).copy())
+                for axb in ax_bnds_names
+            ]
+
+            if _check_axes_uniform(axes, ax_bnds):
+                dims, spacing, origin, ax_inc = _create_uniform(axes, ax_bnds)
+                grid = fm.UniformGrid(
+                    dims=dims,
+                    spacing=spacing,
+                    origin=origin,
+                    data_location=fm.Location.CELLS,
+                    axes_names=ax_names,
+                    axes_increase=ax_inc,
+                    axes_reversed=axes_reversed,
+                    axes_attributes=axes_attrs,
+                    crs=crs,
+                )
+            else:
+                # NOTE: we use point-associated data here and
+                #       convert it to cell-associated in the grid
+                rec_axes = _create_rec_axes(axes, ax_bnds)
+                grid = fm.RectilinearGrid(
+                    axes=rec_axes,
+                    axes_names=ax_names,
+                    data_location=fm.Location.CELLS,
+                    axes_reversed=axes_reversed,
+                    axes_attributes=axes_attrs,
+                    crs=crs,
+                )
 
     return fm.Info(time=current_time, grid=grid, meta=meta, mask=variable.mask)
+
+
+def _get_crs(dataset, variable, crs):
+    """Gets the CRS from either the dataset or the variable's CRS"""
+
+    if variable.crs is not Ellipsis:
+        # Overwrite with variable's value
+        crs = variable.crs
+
+    if crs is None:
+        return None
+
+    if crs is Ellipsis:
+        crs_value = None
+        data_var = dataset.variables[variable.name]
+        if hasattr(data_var, "grid_mapping"):
+            mapping = getattr(data_var, "grid_mapping")
+            crs_var = dataset.variables[mapping]
+            crs_dict = {attr: getattr(crs_var, attr) for attr in crs_var.ncattrs()}
+            crs_value = CRS.from_cf(crs_dict)
+        return crs_value
+
+    return CRS.from_user_input(crs)
 
 
 def set_mask(info, data, dataset, variable):
@@ -909,7 +954,7 @@ def _create_rec_axes(axes, bnds):
     return [_create_point_axis(ax, bd) for ax, bd in zip(axes, bnds)]
 
 
-def _create_mesh(dataset, mesh_name, location, info):
+def _create_mesh(dataset, mesh_name, location, info, crs):
     if location not in MESH_LOCATIONS:
         msg = f"NetCDF: mesh data has invalid location: {location}."
         raise ValueError(msg)
@@ -957,6 +1002,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             points=points,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     elif location == "edge":
         if mesh_dim < 1:
@@ -999,6 +1045,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             data_location=fm.Location.CELLS,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     elif location == "face":
         if mesh_dim < 2:
@@ -1063,6 +1110,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             data_location=fm.Location.CELLS,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     else:
         # location is "volume" here
@@ -1147,6 +1195,7 @@ def _create_mesh(dataset, mesh_name, location, info):
             data_location=fm.Location.CELLS,
             axes_attributes=axes_attrs,
             axes_names=ax_names,
+            crs=crs,
         )
     return grid
 
@@ -1425,13 +1474,27 @@ def create_nc_framework(
         mesh_registry.append(entry)
         return entry
 
+    crs_registry = []
+
     for var in variables:
         grid = in_infos[var.io_name].grid
+        crs_index = -1
+        if grid.crs is not None:
+            crs = CRS.from_user_input(grid.crs)
+            try:
+                crs_index = crs_registry.index(crs)
+            except ValueError:
+                crs_index = len(crs_registry)
+                crs_registry.append(crs)
+
         if isinstance(grid, fm.data.StructuredGrid):
-            axes_names = (
-                tuple(reversed(grid.axes_names))
+            axes_names = tuple(
+                reversed(grid.axes_names) if grid.axes_reversed else grid.axes_names
+            )
+            indices = tuple(
+                reversed(range(len(grid.axes_names)))
                 if grid.axes_reversed
-                else tuple(grid.axes_names)
+                else range(len(grid.axes_names))
             )
 
             for i, ax in enumerate(axes_names):
@@ -1443,8 +1506,8 @@ def create_nc_framework(
                     raise ValueError("NetCDF: can't add different axes with same name.")
                 dataset.createDimension(ax, len(grid.data_axes[i]))
                 dataset.createVariable(ax, grid.data_axes[i].dtype, (ax,))
-                dataset[ax].setncatts(grid.axes_attributes[i])
-                dataset[ax].setncattr("axis", "XYZ"[i])
+                dataset[ax].setncatts(grid.axes_attributes[indices[i]])
+                dataset[ax].setncattr("axis", "XYZ"[indices[i]])
                 dataset[ax][:] = grid.data_axes[i]
                 # add axis bounds if data location is cells
 
@@ -1453,6 +1516,8 @@ def create_nc_framework(
             ncvar = dataset.createVariable(var.name, dtype, dim)
             meta = in_infos[var.io_name].meta
             ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
+            if grid.crs is not None:
+                ncvar.setncatts({"grid_mapping": f"crs_{crs_index}"})
 
         elif isinstance(grid, fm.UnstructuredGrid):
             mesh_info = _get_mesh_info(grid)
@@ -1473,7 +1538,25 @@ def create_nc_framework(
             meta["mesh"] = mesh_info["mesh_name"]
             meta["location"] = location
             ncvar.setncatts({n: str(v) if n == "units" else v for n, v in meta.items()})
+            if grid.crs is not None:
+                ncvar.setncatts({"grid_mapping": f"crs_{crs_index}"})
 
         else:
             msg = f"NetCDF: {var.name} is not given on a supported grid."
             raise ValueError(msg)
+
+    for i, crs in enumerate(crs_registry):
+        crs_var = dataset.createVariable(f"crs_{i}", "i4")
+
+        # Write spatial_ref for rioxarray
+        crs_var.spatial_ref = crs.to_wkt()
+
+        # Write CF projection parameters
+        cf = crs.to_cf()
+
+        for key, value in cf.items():
+            setattr(crs_var, key, value)
+
+        # EPSG code
+        if crs.to_epsg() is not None:
+            crs_var.epsg_code = f"EPSG:{crs.to_epsg()}"

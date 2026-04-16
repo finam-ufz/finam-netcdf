@@ -1,5 +1,12 @@
 # Changelog
 
+## [unpublished]
+
+### Features
+
+* Implements reading CRS form and writing to NetCDF files (!48)
+* Adds options to force a CRS for all or individual variables (!48)
+
 ## [v0.2.0]
 
 ### Enhancements
