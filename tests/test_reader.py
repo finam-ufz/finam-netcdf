@@ -177,6 +177,44 @@ class TestReader(unittest.TestCase):
         self.assertEqual(consumer.inputs["lai2"].info.grid.crs.name, "WGS 84")
         self.assertEqual(consumer.inputs["lai3"].info.grid.crs, None)
 
+    def test_time_reader_force_crs(self):
+        path = "tests/data/with_crs.nc"
+        reader = NetCdfReader(
+            path,
+            [
+                Variable("lai", crs=None),
+                Variable("lai2"),
+                Variable("lai3", crs="EPSG:4326"),
+            ],
+            crs="EPSG:3035",
+        )
+
+        consumer = fm.components.DebugConsumer(
+            {
+                "lai1": fm.Info(time=None, grid=None, units=None),
+                "lai2": fm.Info(time=None, grid=None, units=None),
+                "lai3": fm.Info(time=None, grid=None, units=None),
+            },
+            start=datetime(2000, 1, 1, 0, 0, 0),
+            step=timedelta(days=1),
+        )
+
+        comp = fm.Composition([reader, consumer], log_level="DEBUG")
+
+        reader.outputs["lai"] >> consumer.inputs["lai1"]
+        reader.outputs["lai2"] >> consumer.inputs["lai2"]
+        reader.outputs["lai3"] >> consumer.inputs["lai3"]
+
+        comp.connect()
+
+        comp.run(end_time=datetime(2000, 1, 31, 0, 0))
+
+        self.assertEqual(consumer.inputs["lai1"].info.grid.crs, None)
+        self.assertEqual(
+            consumer.inputs["lai2"].info.grid.crs.name, "ETRS89-extended / LAEA Europe"
+        )
+        self.assertEqual(consumer.inputs["lai3"].info.grid.crs.name, "WGS 84")
+
 
 class TestMeshReader(unittest.TestCase):
     def _mesh_meta(self, path):
