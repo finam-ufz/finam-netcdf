@@ -2,7 +2,7 @@
 
 ## [unpublished]
 
-### Enhancements
+### Features
 
 * Implements reading CRS form and writing to NetCDF files (!48)
 * Adds options to force a CRS for all or individual variables (!48)
