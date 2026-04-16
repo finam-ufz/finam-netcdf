@@ -1548,12 +1548,12 @@ def create_nc_framework(
     for i, crs in enumerate(crs_registry):
         crs_var = dataset.createVariable(f"crs_{i}", "i4")
 
-        # Write WKT
+        # Write spatial_ref for rioxarray
         crs_var.spatial_ref = crs.to_wkt()
-        crs_var.crs_wkt = crs.to_wkt()
 
         # Write CF projection parameters
         cf = crs.to_cf()
+
         for key, value in cf.items():
             setattr(crs_var, key, value)
 
